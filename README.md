@@ -296,13 +296,13 @@ def lec(results_series, riskscenario, ymax=None, xmin=0, xmax=None, appetite_pts
 Call it with `total_loss` from the simulation:
 
 ```python
-lec(total_loss, riskscenario="Ransomware")
+lec(total_loss, riskscenario="Ransomware", currency="MSEK")
 ```
 
 To overlay a risk appetite line, pass `appetite_pts` as a list of `(loss, exceedance_probability)` coordinates — for example, "no more than 5% chance of exceeding 500 MSEK":
 
 ```python
-lec(total_loss, riskscenario="Ransomware", appetite_pts=[(0, 10), (500, 5)])
+lec(total_loss, riskscenario="Ransomware", currency="MSEK", appetite_pts=[(0, 10), (500, 5)])
 ```
 
 ### Analytical Shortcut (Mean Only)
