@@ -162,7 +162,7 @@ A common mistake is to apply LRS to historical *loss incidents* rather than *thr
 
 ## Estimating Loss Magnitudes
 
-Both primary and secondary losses are modeled as **lognormal distributions**, and the model combines them with the loss probability using **Monte Carlo simulation**. The probability of a loss event is a point estimate; the loss magnitudes are distributions sampled in simulation.
+Both primary and secondary losses are combined with the loss probability using one of two approaches: a **deterministic** calculation using the Beta-PERT mean (fast, single expected-value output, basic arithmetic only) or a **Monte Carlo simulation** (full annual loss distribution with tail metrics). Use deterministic for quick estimates; use simulation when tail risk matters.
 
 Lognormal is the natural choice for loss magnitudes because:
 
@@ -192,6 +192,29 @@ This is the same elicitation pattern used in Doug Hubbard's calibrated-estimatio
 ```
 
 The constant 3.29 is 2 × 1.645, where 1.645 is the z-score for the 5th and 95th percentiles of a standard normal distribution.
+
+### Deterministic Output
+
+The deterministic approach applies the same Beta-PERT mean formula used for threat frequency to loss magnitudes. L and U are treated as min and max, and a mode (most likely loss) is added as a third input. No logarithms or exponentials required.
+
+```python
+# Inputs
+p_loss_event    = 0.13   # from formula: F × T/(T+P)
+S               = 0.4    # P(secondary loss | primary loss)
+L_primary       = 10     # Minimum primary loss
+mode_primary    = 14     # Most likely primary loss
+U_primary       = 20     # Maximum primary loss
+L_secondary     = 50     # Minimum secondary loss
+mode_secondary  = 70     # Most likely secondary loss
+U_secondary     = 100    # Maximum secondary loss
+
+# Beta-PERT means (λ=4, standard PERT)
+mean_primary   = (L_primary + 4 * mode_primary + U_primary) / 6
+mean_secondary = (L_secondary + 4 * mode_secondary + U_secondary) / 6
+
+# Output
+expected_annual_loss = p_loss_event * (mean_primary + S * mean_secondary)
+```
 
 ### Monte Carlo Simulation
 
