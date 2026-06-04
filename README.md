@@ -251,13 +251,18 @@ import seaborn as sns
 from statsmodels.distributions.empirical_distribution import ECDF
 from matplotlib.ticker import FuncFormatter
 
-def lec(results_series, riskscenario, ymax=100, xmin=0, xmax=1000, appetite_pts=None, currency="MSEK"):
+def lec(results_series, riskscenario, ymax=None, xmin=0, xmax=None, appetite_pts=None, currency="MSEK"):
 
     result_nparray = np.array(results_series).flatten()
 
     ecdf = ECDF(result_nparray)
     loss_grid = np.linspace(result_nparray.min(), result_nparray.max(), num=500)
     exceed_prob = 100 * (1 - ecdf(loss_grid))
+
+    if xmax is None:
+        xmax = np.percentile(result_nparray, 99)
+    if ymax is None:
+        ymax = min(100, float(100 * (1 - ecdf(xmin))) * 1.1)
 
     plt.figure(figsize=(7, 4))
 
@@ -297,7 +302,7 @@ lec(total_loss, riskscenario="Ransomware")
 To overlay a risk appetite line, pass `appetite_pts` as a list of `(loss, exceedance_probability)` coordinates — for example, "no more than 5% chance of exceeding 500 MSEK":
 
 ```python
-lec(total_loss, riskscenario="Ransomware", xmax=2000, appetite_pts=[(0, 10), (500, 5)])
+lec(total_loss, riskscenario="Ransomware", appetite_pts=[(0, 10), (500, 5)])
 ```
 
 ### Analytical Shortcut (Mean Only)
