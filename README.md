@@ -269,9 +269,9 @@ def lec(results_series, riskscenario, ymax=None, xmin=0, xmax=None, appetite_pts
     sns.lineplot(x=loss_grid, y=exceed_prob, linestyle='-', linewidth=2,
                  color='#888B8D', label='Exceedance Probability')
 
-    if appetite_pts and any(p[1] > 0 for p in appetite_pts):
-        pts = sorted(appetite_pts, key=lambda p: p[0])
-        plt.plot([p[0] for p in pts], [p[1] for p in pts],
+    if appetite_pts and any(p[0] > 0 for p in appetite_pts):
+        pts = sorted(appetite_pts, key=lambda p: p[1])
+        plt.plot([p[1] for p in pts], [p[0] for p in pts],
                  linestyle='--', linewidth=1.5, color='red',
                  marker='o', markersize=5, label='Risk appetite')
 
@@ -299,10 +299,10 @@ Call it with `total_loss` from the simulation:
 lec(total_loss, riskscenario="Ransomware", currency="MSEK")
 ```
 
-To overlay a risk appetite line, pass `appetite_pts` as a list of `(loss, exceedance_probability)` coordinates — for example, "no more than 5% chance of exceeding 500 MSEK":
+To overlay a risk appetite line, pass `appetite_pts` as a list of `(exceedance_probability, loss)` coordinates — for example, "no more than 5% chance of exceeding 500 MSEK":
 
 ```python
-lec(total_loss, riskscenario="Ransomware", currency="MSEK", appetite_pts=[(0, 10), (500, 5)])
+lec(total_loss, riskscenario="Ransomware", currency="MSEK", appetite_pts=[(10, 0), (5, 500)])
 ```
 
 ### Analytical Shortcut (Mean Only)
