@@ -240,6 +240,66 @@ The output is a full **annual loss distribution**, which supports:
 
 This is more informative than a single expected-value number because most loss-related decisions (insurance limits, capital reserves, risk-appetite thresholds) depend on the tail of the distribution, not just the mean.
 
+### Plotting the Loss Exceedance Curve
+
+The loss exceedance curve (LEC) shows the probability that annual loss exceeds any given threshold. Pass `total_loss` from the Monte Carlo simulation directly as `results_series`. An optional `appetite_pts` list of `(loss, probability)` tuples overlays a risk appetite line.
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from statsmodels.distributions.empirical_distribution import ECDF
+from matplotlib.ticker import FuncFormatter
+
+def lec(results_series, riskscenario, ymax=100, xmin=0, xmax=1000, appetite_pts=None, currency="MSEK"):
+
+    result_nparray = np.array(results_series).flatten()
+
+    ecdf = ECDF(result_nparray)
+    loss_grid = np.linspace(result_nparray.min(), result_nparray.max(), num=500)
+    exceed_prob = 100 * (1 - ecdf(loss_grid))
+
+    plt.figure(figsize=(7, 4))
+
+    sns.lineplot(x=loss_grid, y=exceed_prob, linestyle='-', linewidth=2,
+                 color='#888B8D', label='Exceedance Probability')
+
+    if appetite_pts and any(p[1] > 0 for p in appetite_pts):
+        pts = sorted(appetite_pts, key=lambda p: p[0])
+        plt.plot([p[0] for p in pts], [p[1] for p in pts],
+                 linestyle='--', linewidth=1.5, color='red',
+                 marker='o', markersize=5, label='Risk appetite')
+
+    plt.title(f'{riskscenario} Loss Exceedance Curve', fontsize=16, fontweight='bold')
+    plt.xlabel(f'Loss amount ({currency})', fontsize=12)
+    plt.ylabel('Exceedance Probability (%)', fontsize=12)
+
+    plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=12)
+    plt.legend(fontsize=10)
+
+    plt.gca().xaxis.set_major_formatter(FuncFormatter(lambda x, _: f'{x:.0f}'))
+    plt.ylim(0, ymax)
+    plt.xlim(xmin, xmax)
+    plt.tight_layout()
+
+    if __name__ == "__main__":
+        plt.show()
+```
+
+Call it with `total_loss` from the simulation:
+
+```python
+lec(total_loss, riskscenario="Ransomware")
+```
+
+To overlay a risk appetite line, pass `appetite_pts` as a list of `(loss, exceedance_probability)` coordinates — for example, "no more than 5% chance of exceeding 500 MSEK":
+
+```python
+lec(total_loss, riskscenario="Ransomware", xmax=2000, appetite_pts=[(0, 10), (500, 5)])
+```
+
 ### Analytical Shortcut (Mean Only)
 
 If only the expected annual loss is needed (no tail or percentile information), the simulation can be skipped using the closed-form lognormal mean:
