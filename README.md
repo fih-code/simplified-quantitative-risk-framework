@@ -305,23 +305,6 @@ To overlay a risk appetite line, pass `appetite_pts` as a list of `(exceedance_p
 lec(total_loss, riskscenario="Ransomware", currency="MSEK", appetite_pts=[(10, 0), (5, 500)])
 ```
 
-### Analytical Shortcut (Mean Only)
-
-If only the expected annual loss is needed (no tail or percentile information), the simulation can be skipped using the closed-form lognormal mean:
-
-```
-mean = e^(μ + σ²/2)
-E[annual loss] = P(loss event) × ( mean_primary + S × mean_secondary )
-```
-
-In a spreadsheet:
-
-```
-mean = EXP(μ + σ^2/2)
-```
-
-This is a fast sanity check but loses all tail information. For any decision involving extreme losses, run the simulation.
-
 ## Secondary Losses
 
 Loss events often trigger follow-on consequences beyond the immediate primary loss: regulatory fines, lawsuits, customer churn, reputational damage, increased insurance costs. These are called **secondary losses** in the FAIR taxonomy.
