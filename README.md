@@ -203,6 +203,10 @@ import numpy as np
 # Inputs
 p_loss_event   = 0.13         # from formula: F × T/(T+P)
 S              = 0.4          # P(secondary loss | primary loss)
+L_primary      = 10           # Lower bound primary losses 90% confidence interval
+U_primary      = 20           # Upper bound primary losses 90% confidence interval
+L_secondary    = 50           # Lower bound secondary losses 90% confidence interval
+U_secondary    = 100          # Upper bound secondary losses 90% confidence interval
 
 mu_primary     = (np.log(L_primary) + np.log(U_primary)) / 2
 sigma_primary  = (np.log(U_primary) - np.log(L_primary)) / 3.29
