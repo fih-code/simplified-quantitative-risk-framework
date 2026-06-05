@@ -191,8 +191,8 @@
         </div>
 
         <div class="grid2" style="max-width:440px; margin-top:1.1rem">
-          <div class="field"><label>T — Threat strength</label><input type="number" id="T" min="0" max="1" step="0.01" value="0.8" oninput="recalc()" /><span class="hint">0 to 1</span></div>
-          <div class="field"><label>P — Protection strength</label><input type="number" id="P" min="0" max="1" step="0.01" value="0.4" oninput="recalc()" /><span class="hint">ceiling = 1/(1+P)</span></div>
+          <div class="field"><label>T — Threat strength</label><input type="number" id="T" min="0" max="1" step="0.01" value="1" oninput="recalc()" /><span class="hint">0 to 1</span></div>
+          <div class="field"><label>P — Protection strength</label><input type="number" id="P" min="0" max="1" step="0.01" value="0" oninput="recalc()" /><span class="hint">ceiling = 1/(1+P)</span></div>
         </div>
 
         <div class="vuln">
@@ -211,8 +211,8 @@
       <div class="card section-card">
         <div class="section-head"><span class="ix">02</span><h3>Primary loss</h3><span class="sub">90% confidence interval</span></div>
         <div class="grid2">
-          <div class="field"><label>L₅th — Lower bound</label><input type="number" id="L5-primary" min="0" step="1" value="100000" /><span class="hint">5th percentile · you'd be surprised below</span></div>
-          <div class="field"><label>U₉₅th — Upper bound</label><input type="number" id="U95-primary" min="0" step="1" value="2000000" /><span class="hint">95th percentile · you'd be surprised above</span></div>
+          <div class="field"><label>L₅th — Lower bound</label><input type="number" id="L5-primary" min="0" step="0.01" value="0.7" /><span class="hint">5th percentile · you'd be surprised below</span></div>
+          <div class="field"><label>U₉₅th — Upper bound</label><input type="number" id="U95-primary" min="0" step="0.01" value="1.5" /><span class="hint">95th percentile · you'd be surprised above</span></div>
         </div>
         <div class="note"><i data-lucide="info"></i><span>These are percentiles, not hard caps — about 5% of simulated draws will exceed U₉₅th. That tail is what drives VaR99.</span></div>
       </div>
@@ -221,7 +221,7 @@
       <div class="card section-card">
         <div class="section-head"><span class="ix">03</span><h3>Secondary loss</h3><span class="sub">Fines · churn · reputation</span></div>
         <div class="grid3">
-          <div class="field"><label>S — P(secondary | primary)</label><input type="number" id="S" min="0" max="1" step="0.01" value="0.4" /><span class="hint">0 to ignore</span></div>
+          <div class="field"><label>S — P(secondary | primary)</label><input type="number" id="S" min="0" max="1" step="0.01" value="0" /><span class="hint">0 to ignore</span></div>
           <div class="field"><label>L₅th — Lower bound</label><input type="number" id="L5-secondary" min="0" step="1" value="500000" /></div>
           <div class="field"><label>U₉₅th — Upper bound</label><input type="number" id="U95-secondary" min="0" step="1" value="10000000" /></div>
         </div>
@@ -231,7 +231,7 @@
       <div class="card section-card">
         <div class="section-head"><span class="ix">04</span><h3>Simulation</h3><span class="sub">Monte Carlo</span></div>
         <div class="grid2" style="max-width:440px">
-          <div class="field"><label>Iterations</label><input type="number" id="N" min="1000" max="500000" step="1000" value="50000" /><span class="hint">10k fast · 100k finer tail</span></div>
+          <div class="field"><label>Iterations</label><input type="number" id="N" min="1000" max="500000" step="1000" value="10000" /><span class="hint">10k fast · 100k finer tail</span></div>
           <div class="field"><label>Currency label</label><input type="text" id="currency" value="MSEK" /><span class="hint">shown on outputs</span></div>
         </div>
       </div>
