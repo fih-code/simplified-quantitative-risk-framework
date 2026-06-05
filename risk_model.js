@@ -107,17 +107,17 @@ function summarise(total_loss) {
  * @returns {{ loss: number[], exceedancePct: number[] }}
  */
 function computeLEC(total_loss, numPoints = 500) {
-  const sorted = Array.from(total_loss).sort((a, b) => a - b);
-  const N      = sorted.length;
-  const min    = sorted[0];
-  const max    = sorted[N - 1];
-  const step   = (max - min) / (numPoints - 1);
+  const sorted     = Array.from(total_loss).sort((a, b) => a - b);
+  const N          = sorted.length;
+  const minNonZero = sorted.find(v => v > 0) || sorted[N - 1];
+  const max        = sorted[N - 1];
+  const step       = (max - minNonZero) / (numPoints - 1);
 
   const loss         = [];
   const exceedancePct = [];
 
   for (let i = 0; i < numPoints; i++) {
-    const threshold = min + i * step;
+    const threshold = minNonZero + i * step;
     // Binary search for first value >= threshold
     let lo = 0, hi = N;
     while (lo < hi) {
