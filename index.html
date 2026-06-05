@@ -127,6 +127,45 @@
       border-radius: 0 4px 4px 0;
       margin-top: 0.75rem;
     }
+
+    .method-tabs {
+      display: flex;
+      gap: 0.4rem;
+      margin-bottom: 1.25rem;
+    }
+    .method-tab {
+      padding: 0.35rem 1rem;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      cursor: pointer;
+      background: #fff;
+      color: #6b7280;
+      transition: all .15s;
+    }
+    .method-tab.active {
+      background: #4f46e5;
+      border-color: #4f46e5;
+      color: #fff;
+    }
+    .method-panel { display: none; margin-bottom: 1rem; }
+    .method-panel.active { display: block; }
+
+    select {
+      padding: 0.5rem 0.75rem;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      width: 100%;
+      background: #fff;
+      transition: border-color .15s;
+    }
+    select:focus {
+      outline: none;
+      border-color: #4f46e5;
+      box-shadow: 0 0 0 3px rgba(79,70,229,.1);
+    }
   </style>
 </head>
 <body>
@@ -141,25 +180,85 @@
   <!-- Loss Event Probability -->
   <div class="card">
     <h2>Loss Event Probability</h2>
-    <div class="grid-3">
-      <div class="field">
+
+    <!-- F estimation method -->
+    <div style="margin-bottom:0.5rem;">
+      <span style="font-size:0.8rem;font-weight:500;color:#374151;">F — Annual threat frequency · estimation method</span>
+    </div>
+    <div class="method-tabs">
+      <button type="button" class="method-tab active" onclick="setFMethod('direct')">Direct</button>
+      <button type="button" class="method-tab" onclick="setFMethod('lrs')">LRS</button>
+      <button type="button" class="method-tab" onclick="setFMethod('pert')">Beta-PERT</button>
+    </div>
+
+    <!-- Direct -->
+    <div id="f-direct" class="method-panel active">
+      <div class="field" style="max-width:280px;">
         <label>F — Annual threat frequency</label>
-        <input type="number" id="F" min="0" max="1" step="0.01" value="0.19" />
-        <span class="hint">0 = never, 1 = every year</span>
+        <input type="number" id="F-direct" min="0" max="1" step="0.01" value="0.19" oninput="updatePLoss()" />
+        <span class="hint">0 = never · 1 = every year</span>
       </div>
+    </div>
+
+    <!-- LRS -->
+    <div id="f-lrs" class="method-panel">
+      <div class="grid-2" style="max-width:560px;">
+        <div class="field">
+          <label>s — Years with threat events observed</label>
+          <input type="number" id="F-lrs-s" min="0" step="1" value="5" oninput="updatePLoss()" />
+        </div>
+        <div class="field">
+          <label>n — Total years observed</label>
+          <input type="number" id="F-lrs-n" min="1" step="1" value="10" oninput="updatePLoss()" />
+          <span class="hint">F = (s + 1) / (n + 2)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Beta-PERT -->
+    <div id="f-pert" class="method-panel">
+      <div class="grid-2" style="max-width:560px;">
+        <div class="field">
+          <label>min — Minimum plausible frequency</label>
+          <input type="number" id="F-pert-min" min="0" max="1" step="0.01" value="0.05" oninput="updatePLoss()" />
+        </div>
+        <div class="field">
+          <label>mode — Most likely frequency</label>
+          <input type="number" id="F-pert-mode" min="0" max="1" step="0.01" value="0.15" oninput="updatePLoss()" />
+        </div>
+        <div class="field">
+          <label>max — Maximum plausible frequency</label>
+          <input type="number" id="F-pert-max" min="0" max="1" step="0.01" value="0.50" oninput="updatePLoss()" />
+        </div>
+        <div class="field">
+          <label>Confidence</label>
+          <select id="F-pert-lambda" onchange="updatePLoss()">
+            <option value="1">Negligible (λ=1)</option>
+            <option value="2">Low (λ=2)</option>
+            <option value="4" selected>Moderate (λ=4)</option>
+            <option value="8">High (λ=8)</option>
+          </select>
+          <span class="hint">F = (min + λ·mode + max) / (λ + 2)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- T and P -->
+    <div class="grid-2" style="max-width:560px; margin-top:0.25rem;">
       <div class="field">
         <label>T — Threat strength</label>
-        <input type="number" id="T" min="0" max="1" step="0.01" value="0.8" />
+        <input type="number" id="T" min="0" max="1" step="0.01" value="0.8" oninput="updatePLoss()" />
         <span class="hint">0 to 1</span>
       </div>
       <div class="field">
         <label>P — Protection strength</label>
-        <input type="number" id="P" min="0" max="1" step="0.01" value="0.4" />
+        <input type="number" id="P" min="0" max="1" step="0.01" value="0.4" oninput="updatePLoss()" />
         <span class="hint">0 to 1 · ceiling = 1/(1+P)</span>
       </div>
     </div>
+
     <div class="derived">
-      <span>P(loss event) = F × T / (T + P)</span>
+      <span>P(loss event) = F × T / (T + P) &nbsp;·&nbsp; F = <span id="f-display">—</span></span>
       <strong id="p-loss-display">—</strong>
     </div>
   </div>
@@ -254,17 +353,47 @@
 
 <script src="risk_model.js"></script>
 <script>
+  // ── F method switching ──────────────────────────────────────────────────────
+  let fMethod = "direct";
+
+  function setFMethod(method) {
+    fMethod = method;
+    document.querySelectorAll(".method-tab").forEach((btn, i) => {
+      btn.classList.toggle("active", ["direct","lrs","pert"][i] === method);
+    });
+    document.querySelectorAll(".method-panel").forEach(panel => {
+      panel.classList.remove("active");
+    });
+    document.getElementById("f-" + method).classList.add("active");
+    updatePLoss();
+  }
+
+  function computeF() {
+    if (fMethod === "direct") {
+      return parseFloat(document.getElementById("F-direct").value) || 0;
+    }
+    if (fMethod === "lrs") {
+      const s = parseFloat(document.getElementById("F-lrs-s").value) || 0;
+      const n = parseFloat(document.getElementById("F-lrs-n").value) || 1;
+      return (s + 1) / (n + 2);
+    }
+    // Beta-PERT
+    const min    = parseFloat(document.getElementById("F-pert-min").value)  || 0;
+    const mode   = parseFloat(document.getElementById("F-pert-mode").value) || 0;
+    const max    = parseFloat(document.getElementById("F-pert-max").value)  || 0;
+    const lambda = parseFloat(document.getElementById("F-pert-lambda").value);
+    return (min + lambda * mode + max) / (lambda + 2);
+  }
+
   // ── Live p(loss event) display ──────────────────────────────────────────────
   function updatePLoss() {
-    const F = parseFloat(document.getElementById("F").value) || 0;
+    const F = computeF();
     const T = parseFloat(document.getElementById("T").value) || 0;
     const P = parseFloat(document.getElementById("P").value) || 0;
     const p = (T + P) > 0 ? F * (T / (T + P)) : 0;
+    document.getElementById("f-display").textContent = F.toFixed(4);
     document.getElementById("p-loss-display").textContent = p.toFixed(4);
   }
-  ["F","T","P"].forEach(id =>
-    document.getElementById(id).addEventListener("input", updatePLoss)
-  );
   updatePLoss();
 
   // ── Number formatter ────────────────────────────────────────────────────────
@@ -280,7 +409,7 @@
 
   // ── Run ─────────────────────────────────────────────────────────────────────
   function runSimulation() {
-    const F = parseFloat(document.getElementById("F").value);
+    const F = computeF();
     const T = parseFloat(document.getElementById("T").value);
     const P = parseFloat(document.getElementById("P").value);
     const S = parseFloat(document.getElementById("S").value);
