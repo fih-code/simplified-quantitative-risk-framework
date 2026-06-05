@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Loss Event Probability Model</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f6f8;
+      color: #1a1a2e;
+      line-height: 1.5;
+    }
+
+    header {
+      background: #1a1a2e;
+      color: #fff;
+      padding: 1.5rem 2rem;
+    }
+    header h1 { font-size: 1.4rem; font-weight: 600; }
+    header p  { font-size: 0.85rem; color: #9ba3b8; margin-top: 0.25rem; }
+
+    main {
+      max-width: 960px;
+      margin: 2rem auto;
+      padding: 0 1.5rem;
+      display: grid;
+      gap: 1.5rem;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 8px;
+      padding: 1.5rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    }
+
+    .card h2 {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: #6b7280;
+      margin-bottom: 1.25rem;
+    }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+
+    @media (max-width: 600px) {
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    }
+
+    .field { display: flex; flex-direction: column; gap: 0.35rem; }
+    .field label { font-size: 0.8rem; font-weight: 500; color: #374151; }
+    .field .hint  { font-size: 0.72rem; color: #9ca3af; }
+
+    input[type="number"] {
+      padding: 0.5rem 0.75rem;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      width: 100%;
+      transition: border-color .15s;
+    }
+    input[type="number"]:focus {
+      outline: none;
+      border-color: #4f46e5;
+      box-shadow: 0 0 0 3px rgba(79,70,229,.1);
+    }
+
+    .derived {
+      background: #f0f4ff;
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 0.75rem;
+    }
+    .derived span { font-size: 0.82rem; color: #4b5563; }
+    .derived strong { font-size: 1rem; color: #4f46e5; }
+
+    button {
+      background: #4f46e5;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 0.7rem 2rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    button:hover  { background: #4338ca; }
+    button:active { background: #3730a3; }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 1rem;
+    }
+
+    .metric {
+      background: #f9fafb;
+      border-radius: 6px;
+      padding: 1rem;
+      text-align: center;
+    }
+    .metric .label { font-size: 0.72rem; color: #6b7280; text-transform: uppercase; letter-spacing: .05em; }
+    .metric .value { font-size: 1.35rem; font-weight: 700; color: #1a1a2e; margin-top: 0.25rem; }
+    .metric.highlight .value { color: #4f46e5; }
+
+    #chart-container { position: relative; height: 320px; }
+
+    .hidden { display: none; }
+
+    .warning {
+      background: #fffbeb;
+      border-left: 3px solid #f59e0b;
+      padding: 0.6rem 0.9rem;
+      font-size: 0.8rem;
+      color: #92400e;
+      border-radius: 0 4px 4px 0;
+      margin-top: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Loss Event Probability Model</h1>
+  <p>Advanced — Monte Carlo simulation with lognormal loss distributions</p>
+</header>
+
+<main>
+
+  <!-- Loss Event Probability -->
+  <div class="card">
+    <h2>Loss Event Probability</h2>
+    <div class="grid-3">
+      <div class="field">
+        <label>F — Annual threat frequency</label>
+        <input type="number" id="F" min="0" max="1" step="0.01" value="0.19" />
+        <span class="hint">0 = never, 1 = every year</span>
+      </div>
+      <div class="field">
+        <label>T — Threat strength</label>
+        <input type="number" id="T" min="0" max="1" step="0.01" value="0.8" />
+        <span class="hint">0 to 1</span>
+      </div>
+      <div class="field">
+        <label>P — Protection strength</label>
+        <input type="number" id="P" min="0" max="1" step="0.01" value="0.4" />
+        <span class="hint">0 to 1 · ceiling = 1/(1+P)</span>
+      </div>
+    </div>
+    <div class="derived">
+      <span>P(loss event) = F × T / (T + P)</span>
+      <strong id="p-loss-display">—</strong>
+    </div>
+  </div>
+
+  <!-- Primary Loss -->
+  <div class="card">
+    <h2>Primary Loss — 90% Confidence Interval</h2>
+    <div class="grid-2">
+      <div class="field">
+        <label>L₅th — Lower bound (5th percentile)</label>
+        <input type="number" id="L5-primary" min="0" step="1" value="100000" />
+        <span class="hint">Smallest loss you'd be surprised to fall below</span>
+      </div>
+      <div class="field">
+        <label>U₉₅th — Upper bound (95th percentile)</label>
+        <input type="number" id="U95-primary" min="0" step="1" value="2000000" />
+        <span class="hint">Largest loss you'd be surprised to exceed</span>
+      </div>
+    </div>
+    <div class="warning">L₅th and U₉₅th are percentiles, not absolute bounds. 5% of simulated draws will exceed U₉₅th.</div>
+  </div>
+
+  <!-- Secondary Loss -->
+  <div class="card">
+    <h2>Secondary Loss</h2>
+    <div class="grid-3">
+      <div class="field">
+        <label>S — P(secondary loss | primary loss)</label>
+        <input type="number" id="S" min="0" max="1" step="0.01" value="0.4" />
+        <span class="hint">Set to 0 to ignore secondary losses</span>
+      </div>
+      <div class="field">
+        <label>L₅th — Lower bound (5th percentile)</label>
+        <input type="number" id="L5-secondary" min="0" step="1" value="500000" />
+      </div>
+      <div class="field">
+        <label>U₉₅th — Upper bound (95th percentile)</label>
+        <input type="number" id="U95-secondary" min="0" step="1" value="10000000" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Run -->
+  <div class="card">
+    <h2>Simulation</h2>
+    <div style="display:flex; align-items:center; gap:1.5rem; flex-wrap:wrap;">
+      <div class="field" style="flex:0 0 200px;">
+        <label>Iterations</label>
+        <input type="number" id="N" min="1000" max="500000" step="1000" value="10000" />
+        <span class="hint">10,000 is fast; 100,000 for finer tail</span>
+      </div>
+      <button onclick="runSimulation()">Run Simulation</button>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div class="card hidden" id="results-card">
+    <h2>Outputs</h2>
+    <div class="metrics">
+      <div class="metric highlight">
+        <div class="label">Expected Annual Loss</div>
+        <div class="value" id="out-mean">—</div>
+      </div>
+      <div class="metric">
+        <div class="label">Median Annual Loss</div>
+        <div class="value" id="out-median">—</div>
+      </div>
+      <div class="metric">
+        <div class="label">VaR 90%</div>
+        <div class="value" id="out-var90">—</div>
+      </div>
+      <div class="metric">
+        <div class="label">VaR 95%</div>
+        <div class="value" id="out-var95">—</div>
+      </div>
+      <div class="metric">
+        <div class="label">VaR 99%</div>
+        <div class="value" id="out-var99">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEC Chart -->
+  <div class="card hidden" id="chart-card">
+    <h2>Loss Exceedance Curve</h2>
+    <div id="chart-container">
+      <canvas id="lec-chart"></canvas>
+    </div>
+  </div>
+
+</main>
+
+<script src="risk_model.js"></script>
+<script>
+  // ── Live p(loss event) display ──────────────────────────────────────────────
+  function updatePLoss() {
+    const F = parseFloat(document.getElementById("F").value) || 0;
+    const T = parseFloat(document.getElementById("T").value) || 0;
+    const P = parseFloat(document.getElementById("P").value) || 0;
+    const p = (T + P) > 0 ? F * (T / (T + P)) : 0;
+    document.getElementById("p-loss-display").textContent = p.toFixed(4);
+  }
+  ["F","T","P"].forEach(id =>
+    document.getElementById(id).addEventListener("input", updatePLoss)
+  );
+  updatePLoss();
+
+  // ── Number formatter ────────────────────────────────────────────────────────
+  function fmt(n) {
+    if (n === 0) return "0";
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + "M";
+    if (n >= 1_000)     return (n / 1_000).toFixed(1) + "k";
+    return n.toFixed(0);
+  }
+
+  // ── Chart instance ──────────────────────────────────────────────────────────
+  let lecChart = null;
+
+  // ── Run ─────────────────────────────────────────────────────────────────────
+  function runSimulation() {
+    const F = parseFloat(document.getElementById("F").value);
+    const T = parseFloat(document.getElementById("T").value);
+    const P = parseFloat(document.getElementById("P").value);
+    const S = parseFloat(document.getElementById("S").value);
+    const N = parseInt(document.getElementById("N").value);
+
+    const inputs = {
+      p_loss_event:      F * (T / (T + P)),
+      S,
+      L_5th_primary:     parseFloat(document.getElementById("L5-primary").value),
+      U_95th_primary:    parseFloat(document.getElementById("U95-primary").value),
+      L_5th_secondary:   parseFloat(document.getElementById("L5-secondary").value),
+      U_95th_secondary:  parseFloat(document.getElementById("U95-secondary").value),
+    };
+
+    const total_loss = monteCarlo(inputs, N);
+    const metrics    = summarise(total_loss);
+    const lec        = computeLEC(total_loss, 300);
+
+    // Show results
+    document.getElementById("results-card").classList.remove("hidden");
+    document.getElementById("chart-card").classList.remove("hidden");
+
+    document.getElementById("out-mean").textContent   = fmt(metrics.expectedAnnualLoss);
+    document.getElementById("out-median").textContent = fmt(metrics.median);
+    document.getElementById("out-var90").textContent  = fmt(metrics.var90);
+    document.getElementById("out-var95").textContent  = fmt(metrics.var95);
+    document.getElementById("out-var99").textContent  = fmt(metrics.var99);
+
+    // LEC chart
+    const chartData = lec.loss.map((x, i) => ({ x, y: lec.exceedancePct[i] }));
+
+    if (lecChart) lecChart.destroy();
+    lecChart = new Chart(document.getElementById("lec-chart"), {
+      type: "line",
+      data: {
+        datasets: [{
+          label: "Exceedance Probability",
+          data: chartData,
+          borderColor: "#4f46e5",
+          borderWidth: 2,
+          pointRadius: 0,
+          fill: false,
+          tension: 0.1,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        parsing: false,
+        scales: {
+          x: {
+            type: "linear",
+            title: { display: true, text: "Annual Loss" },
+            ticks: {
+              callback: v => fmt(v),
+              maxTicksLimit: 8,
+            }
+          },
+          y: {
+            title: { display: true, text: "Exceedance Probability (%)" },
+            min: 0,
+          }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: items => "Loss: " + fmt(items[0].parsed.x),
+              label: item  => "Exceedance: " + item.parsed.y.toFixed(2) + "%",
+            }
+          }
+        }
+      }
+    });
+  }
+</script>
+
+</body>
+</html>

@@ -132,28 +132,30 @@ function computeLEC(total_loss, numPoints = 500) {
   return { loss, exceedancePct };
 }
 
-// ── Example run ───────────────────────────────────────────────────────────────
+// ── Example run (Node.js only) ────────────────────────────────────────────────
 
-const inputs = {
-  p_loss_event:      0.13,
-  S:                 0.4,
-  L_5th_primary:     100_000,
-  U_95th_primary:    2_000_000,
-  L_5th_secondary:   500_000,
-  U_95th_secondary:  10_000_000,
-};
+if (typeof window === "undefined") {
+  const inputs = {
+    p_loss_event:      0.13,
+    S:                 0.4,
+    L_5th_primary:     100_000,
+    U_95th_primary:    2_000_000,
+    L_5th_secondary:   500_000,
+    U_95th_secondary:  10_000_000,
+  };
 
-const total_loss = monteCarlo(inputs, 100_000);
-const metrics    = summarise(total_loss);
-const lec        = computeLEC(total_loss);
+  const total_loss = monteCarlo(inputs, 100_000);
+  const metrics    = summarise(total_loss);
+  const lec        = computeLEC(total_loss);
 
-console.log("── Simulation outputs ──────────────────────────────");
-console.log(`Expected annual loss : ${metrics.expectedAnnualLoss.toFixed(0)}`);
-console.log(`Median annual loss   : ${metrics.median.toFixed(0)}`);
-console.log(`VaR 90%              : ${metrics.var90.toFixed(0)}`);
-console.log(`VaR 95%              : ${metrics.var95.toFixed(0)}`);
-console.log(`VaR 99%              : ${metrics.var99.toFixed(0)}`);
-console.log(`LEC data points      : ${lec.loss.length}`);
+  console.log("── Simulation outputs ──────────────────────────────");
+  console.log(`Expected annual loss : ${metrics.expectedAnnualLoss.toFixed(0)}`);
+  console.log(`Median annual loss   : ${metrics.median.toFixed(0)}`);
+  console.log(`VaR 90%              : ${metrics.var90.toFixed(0)}`);
+  console.log(`VaR 95%              : ${metrics.var95.toFixed(0)}`);
+  console.log(`VaR 99%              : ${metrics.var99.toFixed(0)}`);
+  console.log(`LEC data points      : ${lec.loss.length}`);
+}
 
 // ── Exports (for use as a module) ─────────────────────────────────────────────
 
