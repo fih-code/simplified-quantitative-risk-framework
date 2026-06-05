@@ -310,7 +310,12 @@
         <input type="number" id="N" min="1000" max="500000" step="1000" value="10000" />
         <span class="hint">10,000 is fast; 100,000 for finer tail</span>
       </div>
-      <button onclick="runSimulation()">Run Simulation</button>
+      <div class="field" style="flex:0 0 140px;">
+        <label>Currency</label>
+        <input type="text" id="currency" value="MSEK" placeholder="e.g. MSEK, USD" style="padding:0.5rem 0.75rem;border:1px solid #d1d5db;border-radius:6px;font-size:0.9rem;width:100%;" />
+        <span class="hint">Label shown on outputs</span>
+      </div>
+      <button onclick="runSimulation()" style="align-self:flex-end;margin-bottom:0.1rem;">Run Simulation</button>
     </div>
   </div>
 
@@ -321,22 +326,27 @@
       <div class="metric highlight">
         <div class="label">Expected Annual Loss</div>
         <div class="value" id="out-mean">—</div>
+        <div class="hint" id="unit-mean" style="margin-top:0.2rem;"></div>
       </div>
       <div class="metric">
         <div class="label">Median Annual Loss</div>
         <div class="value" id="out-median">—</div>
+        <div class="hint" id="unit-median" style="margin-top:0.2rem;"></div>
       </div>
       <div class="metric">
         <div class="label">VaR 90%</div>
         <div class="value" id="out-var90">—</div>
+        <div class="hint" id="unit-var90" style="margin-top:0.2rem;"></div>
       </div>
       <div class="metric">
         <div class="label">VaR 95%</div>
         <div class="value" id="out-var95">—</div>
+        <div class="hint" id="unit-var95" style="margin-top:0.2rem;"></div>
       </div>
       <div class="metric">
         <div class="label">VaR 99%</div>
         <div class="value" id="out-var99">—</div>
+        <div class="hint" id="unit-var99" style="margin-top:0.2rem;"></div>
       </div>
     </div>
   </div>
@@ -424,6 +434,7 @@
       U_95th_secondary:  parseFloat(document.getElementById("U95-secondary").value),
     };
 
+    const currency   = document.getElementById("currency").value.trim() || "";
     const total_loss = monteCarlo(inputs, N);
     const metrics    = summarise(total_loss);
     const lec        = computeLEC(total_loss, 300);
@@ -438,8 +449,13 @@
     document.getElementById("out-var95").textContent  = fmt(metrics.var95);
     document.getElementById("out-var99").textContent  = fmt(metrics.var99);
 
+    ["mean","median","var90","var95","var99"].forEach(id =>
+      document.getElementById("unit-" + id).textContent = currency
+    );
+
     // LEC chart
     const chartData = lec.loss.map((x, i) => ({ x, y: lec.exceedancePct[i] }));
+    const xLabel    = currency ? `Annual Loss (${currency})` : "Annual Loss";
 
     if (lecChart) lecChart.destroy();
     lecChart = new Chart(document.getElementById("lec-chart"), {
@@ -462,7 +478,7 @@
         scales: {
           x: {
             type: "linear",
-            title: { display: true, text: "Annual Loss" },
+            title: { display: true, text: xLabel },
             ticks: {
               callback: v => fmt(v),
               maxTicksLimit: 8,
@@ -477,7 +493,7 @@
           legend: { display: false },
           tooltip: {
             callbacks: {
-              title: items => "Loss: " + fmt(items[0].parsed.x),
+              title: items => "Loss: " + fmt(items[0].parsed.x) + (currency ? " " + currency : ""),
               label: item  => "Exceedance: " + item.parsed.y.toFixed(2) + "%",
             }
           }
