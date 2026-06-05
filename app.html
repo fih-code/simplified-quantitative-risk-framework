@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Quantarisk — Risk Quantification</title>
+<link rel="stylesheet" href="theme.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body { background: var(--bg-subtle); }
+
+  /* ── App bar ──────────────────────────────────────────────────────────── */
+  .appbar {
+    position: sticky; top: 0; z-index: 30; background: rgba(255,255,255,.86);
+    backdrop-filter: saturate(1.4) blur(10px); border-bottom: 1px solid var(--line);
+  }
+  .appbar-inner { max-width: 1280px; margin: 0 auto; padding: .8rem 24px;
+    display: flex; align-items: center; gap: 1.25rem; }
+  .brand { display: flex; align-items: center; gap: .6rem; font-weight: 700; color: var(--ink);
+    font-size: 1.12rem; letter-spacing: -.02em; }
+  .brand .mark { width: 30px; height: 30px; border-radius: 8px; background: var(--brand);
+    display: grid; place-items: center; box-shadow: var(--sh-brand); flex-shrink: 0; }
+  .appbar nav { display: flex; gap: .35rem; margin-left: .5rem; }
+  .appbar nav a { color: var(--muted); font-weight: 500; font-size: var(--fs-sm);
+    padding: .4rem .7rem; border-radius: var(--r-sm); }
+  .appbar nav a:hover { background: var(--bg-subtle); color: var(--ink); }
+  .appbar nav a.active { color: var(--ink); background: var(--bg-subtle); }
+  .appbar .spacer { flex: 1; }
+  .scenario { display: flex; align-items: center; gap: .5rem; color: var(--muted);
+    font-size: var(--fs-sm); }
+  .scenario .name { color: var(--ink); font-weight: 600; }
+
+  /* ── Layout ───────────────────────────────────────────────────────────── */
+  .workspace { max-width: 1280px; margin: 1.6rem auto; padding: 0 24px;
+    display: grid; grid-template-columns: minmax(0,1fr) 420px; gap: 1.5rem; align-items: start; }
+  @media (max-width: 1000px) { .workspace { grid-template-columns: 1fr; } }
+
+  .page-head { margin-bottom: 1.1rem; }
+  .page-head h1 { font-size: 1.7rem; }
+  .page-head p { color: var(--muted); margin-top: .3rem; max-width: 60ch; }
+
+  .stack { display: flex; flex-direction: column; gap: 1.1rem; }
+
+  .section-card { padding: 1.4rem 1.5rem; }
+  .section-head { display: flex; align-items: center; gap: .7rem; margin-bottom: 1.1rem; }
+  .section-head .ix { width: 26px; height: 26px; border-radius: 7px; background: var(--brand-soft);
+    color: var(--brand-strong); display: grid; place-items: center; font-family: var(--mono);
+    font-size: .8rem; font-weight: 500; flex-shrink: 0; }
+  .section-head h3 { margin: 0; }
+  .section-head .sub { color: var(--muted); font-size: var(--fs-sm); margin-left: auto; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+  @media (max-width: 560px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+
+  /* segmented control */
+  .seg { display: inline-flex; background: var(--bg-sunken); border-radius: 10px; padding: 4px; gap: 2px; margin-bottom: 1.1rem; }
+  .seg button { font-family: var(--sans); font-size: var(--fs-sm); font-weight: 600; color: var(--muted);
+    border: none; background: transparent; padding: .5rem .95rem; border-radius: 7px; cursor: pointer;
+    transition: all var(--dur) var(--ease); }
+  .seg button:hover { color: var(--ink); }
+  .seg button.active { background: #fff; color: var(--brand-strong); box-shadow: var(--sh-xs); }
+
+  .method-panel { display: none; }
+  .method-panel.active { display: block; }
+
+  /* vulnerability balance bar */
+  .vuln { margin-top: 1.2rem; background: var(--bg-subtle); border-radius: var(--r-sm); padding: 1rem 1.1rem; }
+  .vuln-row { display: flex; justify-content: space-between; font-size: var(--fs-sm); font-weight: 600; }
+  .vuln-row .t { color: var(--red); }
+  .vuln-row .p { color: var(--teal); }
+  .vuln-track { height: 10px; border-radius: var(--r-pill); margin: .55rem 0 .5rem;
+    background: var(--teal); overflow: hidden; display: flex; }
+  .vuln-fill { background: var(--red); height: 100%; transition: width .35s var(--ease); }
+  .vuln-cap { font-size: var(--fs-label); color: var(--muted); font-family: var(--mono); }
+
+  /* live readout strip */
+  .readout { display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    background: var(--brand-soft); border: 1px solid #d4e2fd; border-radius: var(--r-sm);
+    padding: .9rem 1.1rem; margin-top: 1.2rem; }
+  .readout .formula { font-family: var(--mono); font-size: var(--fs-sm); color: var(--brand-strong); }
+  .readout .val { font-family: var(--mono); font-size: 1.5rem; font-weight: 500; color: var(--brand-strong);
+    letter-spacing: -.02em; }
+
+  /* note */
+  .note { display: flex; gap: .6rem; align-items: flex-start; background: var(--amber-soft);
+    border-radius: var(--r-sm); padding: .7rem .9rem; margin-top: 1rem; font-size: var(--fs-sm);
+    color: #8a611a; line-height: 1.5; }
+  .note svg { width: 17px; height: 17px; color: var(--amber); flex-shrink: 0; margin-top: 2px; }
+
+  /* ── Results panel (sticky) ───────────────────────────────────────────── */
+  .results { position: sticky; top: 86px; display: flex; flex-direction: column; gap: 1.1rem; }
+  .result-hero { background: var(--bg-navy); border-radius: var(--r-lg); padding: 1.6rem 1.6rem 1.5rem;
+    color: var(--on-navy); position: relative; overflow: hidden; }
+  .result-hero::after { content:""; position:absolute; right:-40px; top:-40px; width:160px; height:160px;
+    border-radius:50%; background: radial-gradient(circle, rgba(47,109,240,.4), transparent 70%); }
+  .result-hero .eyebrow { color: var(--on-navy-mut); }
+  .result-hero .big { font-family: var(--mono); font-weight: 500; font-size: 2.7rem; letter-spacing: -.03em;
+    line-height: 1.05; margin-top: .5rem; }
+  .result-hero .big .cur { font-size: 1.1rem; color: var(--on-navy-mut); font-weight: 400; margin-left: .35rem; }
+  .result-hero .sub { color: var(--on-navy-mut); font-size: var(--fs-sm); margin-top: .45rem; }
+
+  .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line);
+    border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
+  .metric { background: var(--bg); padding: 1rem 1.1rem; }
+  .metric .k { font-size: var(--fs-label); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+  .metric .v { font-family: var(--mono); font-size: 1.25rem; font-weight: 500; color: var(--ink); margin-top: .25rem; letter-spacing: -.01em; }
+  .metric .v .cur { font-size: .72rem; color: var(--muted-2); margin-left: .2rem; }
+
+  .chart-card { padding: 1.2rem 1.3rem 1.3rem; }
+  .chart-card .ch-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: .4rem; }
+  .chart-card h3 { font-size: var(--fs-h3); }
+  #lecbox { position: relative; height: 230px; }
+
+  .runbar { display: flex; gap: .7rem; }
+  .runbar .btn { flex: 1; justify-content: center; }
+  .empty { color: var(--muted); font-size: var(--fs-sm); text-align: center; padding: 2rem 1rem; }
+</style>
+</head>
+<body>
+
+<header class="appbar">
+  <div class="appbar-inner">
+    <a class="brand" href="index.html">
+      <span class="mark">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4v16h18"/><path d="M5 16c3-1 5-9 8-9s4 5 8 4"/></svg>
+      </span>
+      Quantarisk
+    </a>
+    <nav>
+      <a href="#" class="active">Workspace</a>
+      <a href="index.html">Overview</a>
+      <a href="#">Scenarios</a>
+      <a href="#">Docs</a>
+    </nav>
+    <span class="spacer"></span>
+    <span class="scenario"><i data-lucide="folder"></i> Scenario · <span class="name">Ransomware FY26</span></span>
+    <button class="btn btn-secondary" onclick="downloadExcel()"><i data-lucide="download"></i> Export</button>
+  </div>
+</header>
+
+<div class="workspace">
+  <!-- LEFT: inputs -->
+  <div>
+    <div class="page-head">
+      <div class="eyebrow muted">Loss Event Model</div>
+      <h1>Quantify a risk scenario</h1>
+      <p>Turn a handful of calibrated estimates into an annual loss distribution, value-at-risk, and a loss exceedance curve — without a full FAIR engagement.</p>
+    </div>
+
+    <div class="stack">
+      <!-- Threat & frequency -->
+      <div class="card section-card">
+        <div class="section-head"><span class="ix">01</span><h3>Threat &amp; frequency</h3><span class="sub">How often, how capable</span></div>
+
+        <div class="seg" id="fmethodseg">
+          <button class="active" data-m="direct" onclick="setFMethod('direct')">Direct</button>
+          <button data-m="lrs" onclick="setFMethod('lrs')">From telemetry (LRS)</button>
+          <button data-m="pert" onclick="setFMethod('pert')">Expert range (PERT)</button>
+        </div>
+
+        <div id="f-direct" class="method-panel active">
+          <div class="field" style="max-width:280px">
+            <label>F — Annual threat frequency</label>
+            <input type="number" id="F-direct" min="0" max="1" step="0.01" value="0.19" oninput="recalc()" />
+            <span class="hint">0 = never · 1 = every year</span>
+          </div>
+        </div>
+        <div id="f-lrs" class="method-panel">
+          <div class="grid2" style="max-width:440px">
+            <div class="field"><label>s — Years with events</label><input type="number" id="F-lrs-s" min="0" step="1" value="5" oninput="recalc()" /></div>
+            <div class="field"><label>n — Years observed</label><input type="number" id="F-lrs-n" min="1" step="1" value="10" oninput="recalc()" /><span class="hint">F = (s + 1) / (n + 2)</span></div>
+          </div>
+        </div>
+        <div id="f-pert" class="method-panel">
+          <div class="grid2" style="max-width:560px">
+            <div class="field"><label>min — Minimum plausible</label><input type="number" id="F-pert-min" min="0" max="1" step="0.01" value="0.05" oninput="recalc()" /></div>
+            <div class="field"><label>mode — Most likely</label><input type="number" id="F-pert-mode" min="0" max="1" step="0.01" value="0.15" oninput="recalc()" /></div>
+            <div class="field"><label>max — Maximum plausible</label><input type="number" id="F-pert-max" min="0" max="1" step="0.01" value="0.50" oninput="recalc()" /></div>
+            <div class="field"><label>Confidence</label>
+              <select id="F-pert-lambda" onchange="recalc()">
+                <option value="1">Negligible (λ=1)</option>
+                <option value="2">Low (λ=2)</option>
+                <option value="4" selected>Moderate (λ=4)</option>
+                <option value="8">High (λ=8)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid2" style="max-width:440px; margin-top:1.1rem">
+          <div class="field"><label>T — Threat strength</label><input type="number" id="T" min="0" max="1" step="0.01" value="0.8" oninput="recalc()" /><span class="hint">0 to 1</span></div>
+          <div class="field"><label>P — Protection strength</label><input type="number" id="P" min="0" max="1" step="0.01" value="0.4" oninput="recalc()" /><span class="hint">ceiling = 1/(1+P)</span></div>
+        </div>
+
+        <div class="vuln">
+          <div class="vuln-row"><span class="t">Threat <span id="t-pct" class="mono">—</span></span><span class="p"><span id="p-pct" class="mono">—</span> Protection</span></div>
+          <div class="vuln-track"><div class="vuln-fill" id="vuln-fill" style="width:50%"></div></div>
+          <div class="vuln-cap">Conditional probability protection fails · T/(T+P) = <span id="vuln-val">—</span></div>
+        </div>
+
+        <div class="readout">
+          <div class="formula">P(loss event) = F × T/(T+P) &nbsp;·&nbsp; F = <strong id="f-disp">—</strong></div>
+          <div class="val" id="ploss-disp">—</div>
+        </div>
+      </div>
+
+      <!-- Primary loss -->
+      <div class="card section-card">
+        <div class="section-head"><span class="ix">02</span><h3>Primary loss</h3><span class="sub">90% confidence interval</span></div>
+        <div class="grid2">
+          <div class="field"><label>L₅th — Lower bound</label><input type="number" id="L5-primary" min="0" step="1" value="100000" /><span class="hint">5th percentile · you'd be surprised below</span></div>
+          <div class="field"><label>U₉₅th — Upper bound</label><input type="number" id="U95-primary" min="0" step="1" value="2000000" /><span class="hint">95th percentile · you'd be surprised above</span></div>
+        </div>
+        <div class="note"><i data-lucide="info"></i><span>These are percentiles, not hard caps — about 5% of simulated draws will exceed U₉₅th. That tail is what drives VaR99.</span></div>
+      </div>
+
+      <!-- Secondary loss -->
+      <div class="card section-card">
+        <div class="section-head"><span class="ix">03</span><h3>Secondary loss</h3><span class="sub">Fines · churn · reputation</span></div>
+        <div class="grid3">
+          <div class="field"><label>S — P(secondary | primary)</label><input type="number" id="S" min="0" max="1" step="0.01" value="0.4" /><span class="hint">0 to ignore</span></div>
+          <div class="field"><label>L₅th — Lower bound</label><input type="number" id="L5-secondary" min="0" step="1" value="500000" /></div>
+          <div class="field"><label>U₉₅th — Upper bound</label><input type="number" id="U95-secondary" min="0" step="1" value="10000000" /></div>
+        </div>
+      </div>
+
+      <!-- Simulation -->
+      <div class="card section-card">
+        <div class="section-head"><span class="ix">04</span><h3>Simulation</h3><span class="sub">Monte Carlo</span></div>
+        <div class="grid2" style="max-width:440px">
+          <div class="field"><label>Iterations</label><input type="number" id="N" min="1000" max="500000" step="1000" value="50000" /><span class="hint">10k fast · 100k finer tail</span></div>
+          <div class="field"><label>Currency label</label><input type="text" id="currency" value="MSEK" /><span class="hint">shown on outputs</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: results -->
+  <div class="results">
+    <div class="runbar">
+      <button class="btn btn-primary btn-lg" onclick="runSimulation()"><i data-lucide="play"></i> Run simulation</button>
+    </div>
+
+    <div class="result-hero">
+      <div class="eyebrow">Expected annual loss</div>
+      <div class="big"><span id="r-mean">—</span><span class="cur" id="r-mean-cur"></span></div>
+      <div class="sub" id="r-sub">Run the model to see results</div>
+    </div>
+
+    <div class="metric-grid">
+      <div class="metric"><div class="k">Median</div><div class="v"><span id="r-median">—</span><span class="cur" id="cur-1"></span></div></div>
+      <div class="metric"><div class="k">VaR 90%</div><div class="v"><span id="r-var90">—</span><span class="cur" id="cur-2"></span></div></div>
+      <div class="metric"><div class="k">VaR 95%</div><div class="v"><span id="r-var95">—</span><span class="cur" id="cur-3"></span></div></div>
+      <div class="metric"><div class="k">VaR 99%</div><div class="v"><span id="r-var99">—</span><span class="cur" id="cur-4"></span></div></div>
+    </div>
+
+    <div class="card chart-card">
+      <div class="ch-head"><h3>Loss exceedance curve</h3><span class="badge badge-line" id="loss-years">—</span></div>
+      <div id="lecbox"><canvas id="lec"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<script src="risk_model.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

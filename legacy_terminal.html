@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Loss Event Probability Model</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:        #08090d;
+      --surface:   #0d0f16;
+      --surface2:  #12151f;
+      --border:    #1c2033;
+      --border2:   #262b3d;
+      --amber:     #e8a838;
+      --amber-dim: #7a5618;
+      --green:     #3ecf8e;
+      --text:      #dde1f0;
+      --muted:     #4a5066;
+      --muted2:    #6b7490;
+      --danger:    #f47c5a;
+      --mono:      "IBM Plex Mono", monospace;
+      --sans:      "DM Sans", sans-serif;
+      --display:   "Bebas Neue", sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+      background-image:
+        radial-gradient(circle at 20% 0%, rgba(232,168,56,.04) 0%, transparent 50%),
+        radial-gradient(circle at 80% 100%, rgba(62,207,142,.03) 0%, transparent 50%),
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 48px 48px, 48px 48px;
+      background-position: 0 0, 0 0, -1px -1px, -1px -1px;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────────────── */
+    header {
+      position: relative;
+      padding: 2.5rem 2.5rem 2rem;
+      border-bottom: 1px solid var(--border);
+      overflow: hidden;
+    }
+    header::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(232,168,56,.06) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    header::after {
+      content: "";
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, var(--amber), transparent 60%);
+    }
+    .header-inner {
+      max-width: 1000px;
+      margin: 0 auto;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 2rem;
+    }
+    header h1 {
+      font-family: var(--display);
+      font-size: 2.8rem;
+      letter-spacing: .04em;
+      color: var(--text);
+      line-height: 1;
+    }
+    header h1 span { color: var(--amber); }
+    header p {
+      font-size: 0.78rem;
+      color: var(--muted2);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      margin-top: 0.5rem;
+    }
+    .header-badge {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--amber);
+      border: 1px solid var(--amber-dim);
+      padding: 0.3rem 0.75rem;
+      letter-spacing: .1em;
+      white-space: nowrap;
+      opacity: .8;
+    }
+
+    /* ── Layout ─────────────────────────────────────────────────────────────── */
+    main {
+      max-width: 1000px;
+      margin: 2.5rem auto;
+      padding: 0 2rem;
+      display: grid;
+      gap: 1.25rem;
+    }
+
+    /* ── Cards ──────────────────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 1.75rem;
+      position: relative;
+      animation: fadeUp .4s ease both;
+    }
+    .card::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, var(--amber-dim), transparent 50%);
+    }
+    .card:nth-child(1) { animation-delay: .05s; }
+    .card:nth-child(2) { animation-delay: .10s; }
+    .card:nth-child(3) { animation-delay: .15s; }
+    .card:nth-child(4) { animation-delay: .20s; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .card-header {
+      display: flex;
+      align-items: baseline;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .card-num {
+      font-family: var(--display);
+      font-size: 2rem;
+      color: var(--amber-dim);
+      line-height: 1;
+      letter-spacing: .02em;
+      flex-shrink: 0;
+    }
+    .card-title {
+      font-family: var(--sans);
+      font-size: 0.68rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      color: var(--muted2);
+    }
+
+    /* ── Grid ───────────────────────────────────────────────────────────────── */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.25rem; }
+    @media (max-width: 640px) {
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    }
+
+    /* ── Fields ─────────────────────────────────────────────────────────────── */
+    .field { display: flex; flex-direction: column; gap: 0.4rem; }
+
+    .field label {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      font-weight: 500;
+      color: var(--muted2);
+      letter-spacing: .04em;
+    }
+
+    .field .hint {
+      font-family: var(--mono);
+      font-size: 0.63rem;
+      color: var(--muted);
+    }
+
+    input[type="number"],
+    input[type="text"],
+    select {
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      color: var(--text);
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-bottom: 2px solid var(--border2);
+      padding: 0.55rem 0.75rem;
+      width: 100%;
+      transition: border-color .15s, background .15s;
+      outline: none;
+      -moz-appearance: textfield;
+    }
+    input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+    input[type="number"]:focus,
+    input[type="text"]:focus,
+    select:focus {
+      border-color: var(--border2);
+      border-bottom-color: var(--amber);
+      background: #161926;
+    }
+
+    select { cursor: pointer; }
+    select option { background: var(--surface2); }
+
+    /* ── Method tabs ────────────────────────────────────────────────────────── */
+    .method-label {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      color: var(--muted2);
+      letter-spacing: .06em;
+      margin-bottom: 0.75rem;
+    }
+
+    .method-tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border2);
+    }
+    .method-tab {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      letter-spacing: .06em;
+      padding: 0.5rem 1.25rem;
+      border: none;
+      border-bottom: 2px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      transition: color .15s, border-color .15s;
+      margin-bottom: -1px;
+    }
+    .method-tab:hover  { color: var(--text); }
+    .method-tab.active { color: var(--amber); border-bottom-color: var(--amber); }
+
+    .method-panel { display: none; margin-bottom: 1.25rem; }
+    .method-panel.active { display: block; }
+
+    /* ── Derived display ────────────────────────────────────────────────────── */
+    .derived {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border: 1px solid var(--border2);
+      border-left: 3px solid var(--amber-dim);
+      padding: 0.75rem 1rem;
+      margin-top: 1.25rem;
+      background: rgba(232,168,56,.03);
+    }
+    .derived-formula {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--muted2);
+    }
+    .derived-formula span { color: var(--amber); }
+    .derived-value {
+      font-family: var(--mono);
+      font-size: 1.1rem;
+      font-weight: 500;
+      color: var(--amber);
+    }
+
+    /* ── Warning ────────────────────────────────────────────────────────────── */
+    .warning {
+      border-left: 2px solid var(--danger);
+      padding: 0.6rem 0.9rem;
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      color: #a85840;
+      margin-top: 1rem;
+      background: rgba(244,124,90,.04);
+    }
+
+    /* ── Run button ─────────────────────────────────────────────────────────── */
+    .run-btn {
+      font-family: var(--display);
+      font-size: 1.1rem;
+      letter-spacing: .12em;
+      color: var(--bg);
+      background: var(--amber);
+      border: none;
+      padding: 0.75rem 2.5rem;
+      cursor: pointer;
+      transition: background .15s, transform .1s;
+      align-self: flex-end;
+    }
+    .run-btn:hover  { background: #f0b840; }
+    .run-btn:active { transform: scale(.98); }
+
+    .dl-btn {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      letter-spacing: .06em;
+      color: var(--amber);
+      background: transparent;
+      border: 1px solid var(--amber-dim);
+      padding: 0.4rem 1rem;
+      cursor: pointer;
+      transition: background .15s, color .15s;
+    }
+    .dl-btn:hover {
+      background: rgba(232,168,56,.08);
+      color: var(--amber);
+    }
+
+    /* ── Metrics ────────────────────────────────────────────────────────────── */
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1px;
+      background: var(--border);
+    }
+
+    .metric {
+      background: var(--surface2);
+      padding: 1.25rem 1rem;
+      text-align: center;
+    }
+    .metric.highlight {
+      background: rgba(232,168,56,.06);
+    }
+
+    .metric .label {
+      font-family: var(--mono);
+      font-size: 0.6rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .metric .value {
+      font-family: var(--mono);
+      font-size: 1.4rem;
+      font-weight: 500;
+      color: var(--text);
+      margin-top: 0.4rem;
+      letter-spacing: -.01em;
+    }
+    .metric.highlight .value { color: var(--amber); }
+
+    .metric .unit {
+      font-family: var(--mono);
+      font-size: 0.6rem;
+      color: var(--muted);
+      margin-top: 0.2rem;
+      letter-spacing: .06em;
+    }
+
+    /* ── Chart ──────────────────────────────────────────────────────────────── */
+    #chart-container { position: relative; height: 340px; }
+
+    /* ── Utility ────────────────────────────────────────────────────────────── */
+    .hidden { display: none; }
+
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 1.25rem 0;
+    }
+
+    .sim-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .outputs-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.25rem;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div>
+      <h1>LOSS EVENT <span>PROBABILITY</span></h1>
+      <p>Monte Carlo · Lognormal Distributions · Advanced Risk Quantification</p>
+    </div>
+    <div class="header-badge">QUANTITATIVE RISK MODEL</div>
+  </div>
+</header>
+
+<main>
+
+  <!-- 01 · Loss Event Probability -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-num">01</span>
+      <span class="card-title">Loss Event Probability</span>
+    </div>
+
+    <div class="method-label">F — Annual Threat Frequency · Estimation Method</div>
+    <div class="method-tabs">
+      <button type="button" class="method-tab active" onclick="setFMethod('direct')">DIRECT</button>
+      <button type="button" class="method-tab" onclick="setFMethod('lrs')">LRS</button>
+      <button type="button" class="method-tab" onclick="setFMethod('pert')">BETA-PERT</button>
+    </div>
+
+    <!-- Direct -->
+    <div id="f-direct" class="method-panel active">
+      <div class="field" style="max-width:260px;">
+        <label>F — Annual threat frequency</label>
+        <input type="number" id="F-direct" min="0" max="1" step="0.01" value="0.19" oninput="updatePLoss()" />
+        <span class="hint">0 = never · 1 = every year</span>
+      </div>
+    </div>
+
+    <!-- LRS -->
+    <div id="f-lrs" class="method-panel">
+      <div class="grid-2" style="max-width:520px;">
+        <div class="field">
+          <label>s — Years with threat events observed</label>
+          <input type="number" id="F-lrs-s" min="0" step="1" value="5" oninput="updatePLoss()" />
+        </div>
+        <div class="field">
+          <label>n — Total years observed</label>
+          <input type="number" id="F-lrs-n" min="1" step="1" value="10" oninput="updatePLoss()" />
+          <span class="hint">F = (s + 1) / (n + 2)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Beta-PERT -->
+    <div id="f-pert" class="method-panel">
+      <div class="grid-2" style="max-width:520px;">
+        <div class="field">
+          <label>min — Minimum plausible frequency</label>
+          <input type="number" id="F-pert-min" min="0" max="1" step="0.01" value="0.05" oninput="updatePLoss()" />
+        </div>
+        <div class="field">
+          <label>mode — Most likely frequency</label>
+          <input type="number" id="F-pert-mode" min="0" max="1" step="0.01" value="0.15" oninput="updatePLoss()" />
+        </div>
+        <div class="field">
+          <label>max — Maximum plausible frequency</label>
+          <input type="number" id="F-pert-max" min="0" max="1" step="0.01" value="0.50" oninput="updatePLoss()" />
+        </div>
+        <div class="field">
+          <label>Confidence</label>
+          <select id="F-pert-lambda" onchange="updatePLoss()">
+            <option value="1">Negligible (λ=1)</option>
+            <option value="2">Low (λ=2)</option>
+            <option value="4" selected>Moderate (λ=4)</option>
+            <option value="8">High (λ=8)</option>
+          </select>
+          <span class="hint">F = (min + λ·mode + max) / (λ + 2)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2" style="max-width:520px;">
+      <div class="field">
+        <label>T — Threat strength</label>
+        <input type="number" id="T" min="0" max="1" step="0.01" value="0.8" oninput="updatePLoss()" />
+        <span class="hint">0 to 1</span>
+      </div>
+      <div class="field">
+        <label>P — Protection strength</label>
+        <input type="number" id="P" min="0" max="1" step="0.01" value="0.4" oninput="updatePLoss()" />
+        <span class="hint">0 to 1 · ceiling = 1/(1+P)</span>
+      </div>
+    </div>
+
+    <div class="derived">
+      <div class="derived-formula">
+        P(loss event) = F × T / (T + P) &nbsp;·&nbsp; F = <span id="f-display">—</span>
+      </div>
+      <div class="derived-value" id="p-loss-display">—</div>
+    </div>
+  </div>
+
+  <!-- 02 · Primary Loss -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-num">02</span>
+      <span class="card-title">Primary Loss — 90% Confidence Interval</span>
+    </div>
+    <div class="grid-2">
+      <div class="field">
+        <label>L₅th — Lower bound (5th percentile)</label>
+        <input type="number" id="L5-primary" min="0" step="1" value="100000" />
+        <span class="hint">Smallest loss you'd be surprised to fall below</span>
+      </div>
+      <div class="field">
+        <label>U₉₅th — Upper bound (95th percentile)</label>
+        <input type="number" id="U95-primary" min="0" step="1" value="2000000" />
+        <span class="hint">Largest loss you'd be surprised to exceed</span>
+      </div>
+    </div>
+    <div class="warning">L₅th and U₉₅th are percentiles, not absolute bounds. 5% of simulated draws will exceed U₉₅th.</div>
+  </div>
+
+  <!-- 03 · Secondary Loss -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-num">03</span>
+      <span class="card-title">Secondary Loss</span>
+    </div>
+    <div class="grid-3">
+      <div class="field">
+        <label>S — P(secondary loss | primary loss)</label>
+        <input type="number" id="S" min="0" max="1" step="0.01" value="0.4" />
+        <span class="hint">Set to 0 to ignore secondary losses</span>
+      </div>
+      <div class="field">
+        <label>L₅th — Lower bound (5th percentile)</label>
+        <input type="number" id="L5-secondary" min="0" step="1" value="500000" />
+      </div>
+      <div class="field">
+        <label>U₉₅th — Upper bound (95th percentile)</label>
+        <input type="number" id="U95-secondary" min="0" step="1" value="10000000" />
+      </div>
+    </div>
+  </div>
+
+  <!-- 04 · Simulation -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-num">04</span>
+      <span class="card-title">Simulation</span>
+    </div>
+    <div class="sim-row">
+      <div class="field" style="flex:0 0 180px;">
+        <label>Iterations</label>
+        <input type="number" id="N" min="1000" max="500000" step="1000" value="10000" />
+        <span class="hint">10,000 fast · 100,000 finer tail</span>
+      </div>
+      <div class="field" style="flex:0 0 130px;">
+        <label>Currency</label>
+        <input type="text" id="currency" value="MSEK" placeholder="MSEK, USD…" />
+        <span class="hint">Label on outputs</span>
+      </div>
+      <button class="run-btn" onclick="runSimulation()">RUN SIMULATION</button>
+    </div>
+  </div>
+
+  <!-- 05 · Outputs -->
+  <div class="card hidden" id="results-card">
+    <div class="outputs-header">
+      <div class="card-header" style="margin-bottom:0;">
+        <span class="card-num">05</span>
+        <span class="card-title">Outputs</span>
+      </div>
+      <button class="dl-btn" onclick="downloadExcel()">↓ DOWNLOAD EXCEL</button>
+    </div>
+    <div class="metrics">
+      <div class="metric highlight">
+        <div class="label">Expected Annual Loss</div>
+        <div class="value" id="out-mean">—</div>
+        <div class="unit" id="unit-mean"></div>
+      </div>
+      <div class="metric">
+        <div class="label">Median Annual Loss</div>
+        <div class="value" id="out-median">—</div>
+        <div class="unit" id="unit-median"></div>
+      </div>
+      <div class="metric">
+        <div class="label">VaR 90%</div>
+        <div class="value" id="out-var90">—</div>
+        <div class="unit" id="unit-var90"></div>
+      </div>
+      <div class="metric">
+        <div class="label">VaR 95%</div>
+        <div class="value" id="out-var95">—</div>
+        <div class="unit" id="unit-var95"></div>
+      </div>
+      <div class="metric">
+        <div class="label">VaR 99%</div>
+        <div class="value" id="out-var99">—</div>
+        <div class="unit" id="unit-var99"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 06 · LEC Chart -->
+  <div class="card hidden" id="chart-card">
+    <div class="card-header">
+      <span class="card-num">06</span>
+      <span class="card-title">Loss Exceedance Curve</span>
+    </div>
+    <div id="chart-container">
+      <canvas id="lec-chart"></canvas>
+    </div>
+  </div>
+
+</main>
+
+<script src="risk_model.js"></script>
+<script>
+  // ── F method switching ──────────────────────────────────────────────────────
+  let fMethod = "direct";
+
+  function setFMethod(method) {
+    fMethod = method;
+    document.querySelectorAll(".method-tab").forEach((btn, i) => {
+      btn.classList.toggle("active", ["direct","lrs","pert"][i] === method);
+    });
+    document.querySelectorAll(".method-panel").forEach(panel => {
+      panel.classList.remove("active");
+    });
+    document.getElementById("f-" + method).classList.add("active");
+    updatePLoss();
+  }
+
+  function computeF() {
+    if (fMethod === "direct") {
+      return parseFloat(document.getElementById("F-direct").value) || 0;
+    }
+    if (fMethod === "lrs") {
+      const s = parseFloat(document.getElementById("F-lrs-s").value) || 0;
+      const n = parseFloat(document.getElementById("F-lrs-n").value) || 1;
+      return (s + 1) / (n + 2);
+    }
+    // Beta-PERT
+    const min    = parseFloat(document.getElementById("F-pert-min").value)  || 0;
+    const mode   = parseFloat(document.getElementById("F-pert-mode").value) || 0;
+    const max    = parseFloat(document.getElementById("F-pert-max").value)  || 0;
+    const lambda = parseFloat(document.getElementById("F-pert-lambda").value);
+    return (min + lambda * mode + max) / (lambda + 2);
+  }
+
+  // ── Live p(loss event) display ──────────────────────────────────────────────
+  function updatePLoss() {
+    const F = computeF();
+    const T = parseFloat(document.getElementById("T").value) || 0;
+    const P = parseFloat(document.getElementById("P").value) || 0;
+    const p = (T + P) > 0 ? F * (T / (T + P)) : 0;
+    document.getElementById("f-display").textContent = F.toFixed(4);
+    document.getElementById("p-loss-display").textContent = p.toFixed(4);
+  }
+  updatePLoss();
+
+  // ── Number formatter ────────────────────────────────────────────────────────
+  function fmt(n) {
+    if (n === 0) return "0";
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + "M";
+    if (n >= 1_000)     return (n / 1_000).toFixed(1) + "k";
+    return n.toFixed(0);
+  }
+
+  // ── Chart instance + last results store ────────────────────────────────────
+  let lecChart    = null;
+  let lastResults = null;
+
+  // ── Run ─────────────────────────────────────────────────────────────────────
+  function runSimulation() {
+    const F = computeF();
+    const T = parseFloat(document.getElementById("T").value);
+    const P = parseFloat(document.getElementById("P").value);
+    const S = parseFloat(document.getElementById("S").value);
+    const N = parseInt(document.getElementById("N").value);
+
+    const inputs = {
+      p_loss_event:      F * (T / (T + P)),
+      S,
+      L_5th_primary:     parseFloat(document.getElementById("L5-primary").value),
+      U_95th_primary:    parseFloat(document.getElementById("U95-primary").value),
+      L_5th_secondary:   parseFloat(document.getElementById("L5-secondary").value),
+      U_95th_secondary:  parseFloat(document.getElementById("U95-secondary").value),
+    };
+
+    const currency   = document.getElementById("currency").value.trim() || "";
+    const total_loss = monteCarlo(inputs, N);
+    const metrics    = summarise(total_loss);
+    const lec        = computeLEC(total_loss, 300);
+
+    lastResults = { inputs, metrics, lec, total_loss, currency, F, T, P };
+
+    // Show results
+    document.getElementById("results-card").classList.remove("hidden");
+    document.getElementById("chart-card").classList.remove("hidden");
+
+    document.getElementById("out-mean").textContent   = fmt(metrics.expectedAnnualLoss);
+    document.getElementById("out-median").textContent = fmt(metrics.median);
+    document.getElementById("out-var90").textContent  = fmt(metrics.var90);
+    document.getElementById("out-var95").textContent  = fmt(metrics.var95);
+    document.getElementById("out-var99").textContent  = fmt(metrics.var99);
+
+    ["mean","median","var90","var95","var99"].forEach(id =>
+      document.getElementById("unit-" + id).textContent = currency
+    );
+
+    // LEC chart — auto-scale axes from data
+    const sorted99  = Array.from(total_loss).sort((a, b) => a - b);
+    const xMax      = sorted99[Math.floor(0.99 * sorted99.length)] || sorted99[sorted99.length - 1];
+    const yMax      = Math.min(100, lec.exceedancePct[0] * 1.1);
+
+    const chartData = lec.loss.map((x, i) => ({ x, y: lec.exceedancePct[i] }));
+    const xLabel    = currency ? `Annual Loss (${currency})` : "Annual Loss";
+
+    if (lecChart) lecChart.destroy();
+    lecChart = new Chart(document.getElementById("lec-chart"), {
+      type: "line",
+      data: {
+        datasets: [{
+          label: "Exceedance Probability",
+          data: chartData,
+          borderColor: "#e8a838",
+          borderWidth: 2,
+          pointRadius: 0,
+          fill: {
+            target: "origin",
+            above: "rgba(232,168,56,.06)",
+          },
+          tension: 0.1,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        parsing: false,
+        animation: { duration: 600, easing: "easeOutQuart" },
+        scales: {
+          x: {
+            type: "linear",
+            min: 0,
+            max: xMax,
+            title: {
+              display: true,
+              text: xLabel,
+              color: "#4a5066",
+              font: { family: "'IBM Plex Mono'", size: 11 },
+            },
+            ticks: {
+              callback: v => fmt(v),
+              maxTicksLimit: 8,
+              color: "#4a5066",
+              font: { family: "'IBM Plex Mono'", size: 11 },
+            },
+            grid: { color: "#1c2033" },
+            border: { color: "#1c2033" },
+          },
+          y: {
+            title: {
+              display: true,
+              text: "Exceedance Probability (%)",
+              color: "#4a5066",
+              font: { family: "'IBM Plex Mono'", size: 11 },
+            },
+            min: 0,
+            max: yMax,
+            ticks: {
+              color: "#4a5066",
+              font: { family: "'IBM Plex Mono'", size: 11 },
+            },
+            grid: { color: "#1c2033" },
+            border: { color: "#1c2033" },
+          }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: "#0d0f16",
+            borderColor: "#1c2033",
+            borderWidth: 1,
+            titleColor: "#e8a838",
+            bodyColor: "#6b7490",
+            titleFont: { family: "'IBM Plex Mono'", size: 12 },
+            bodyFont:  { family: "'IBM Plex Mono'", size: 11 },
+            callbacks: {
+              title: items => "Loss: " + fmt(items[0].parsed.x) + (currency ? " " + currency : ""),
+              label: item  => "Exceedance: " + item.parsed.y.toFixed(2) + "%",
+            }
+          }
+        }
+      }
+    });
+  }
+
+  // ── Excel download ───────────────────────────────────────────────────────────
+  function downloadExcel() {
+    if (!lastResults) return;
+    const { inputs, metrics, lec, total_loss, currency, F, T, P } = lastResults;
+    const cur = currency || "—";
+
+    const summaryRows = [
+      ["INPUTS", ""],
+      ["F — Annual threat frequency",        F],
+      ["T — Threat strength",                T],
+      ["P — Protection strength",            P],
+      ["P(loss event)",                      inputs.p_loss_event],
+      ["S — P(secondary loss | primary)",    inputs.S],
+      ["Primary loss L₅th",                  inputs.L_5th_primary],
+      ["Primary loss U₉₅th",                 inputs.U_95th_primary],
+      ["Secondary loss L₅th",                inputs.L_5th_secondary],
+      ["Secondary loss U₉₅th",               inputs.U_95th_secondary],
+      ["Currency",                            cur],
+      [""],
+      ["OUTPUTS", ""],
+      [`Expected Annual Loss (${cur})`,      metrics.expectedAnnualLoss],
+      [`Median Annual Loss (${cur})`,        metrics.median],
+      [`VaR 90% (${cur})`,                   metrics.var90],
+      [`VaR 95% (${cur})`,                   metrics.var95],
+      [`VaR 99% (${cur})`,                   metrics.var99],
+    ];
+
+    const lecRows = [
+      [`Loss Amount (${cur})`, "Exceedance Probability (%)"],
+      ...lec.loss.map((x, i) => [x, lec.exceedancePct[i]]),
+    ];
+
+    const simRows = [
+      [`Iteration`, `Annual Loss (${cur})`],
+      ...Array.from(total_loss).map((v, i) => [i + 1, v]),
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryRows), "Summary");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(lecRows),     "LEC Data");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(simRows),     "Simulation Results");
+    XLSX.writeFile(wb, "risk_model_results.xlsx");
+  }
+</script>
+
+</body>
+</html>
