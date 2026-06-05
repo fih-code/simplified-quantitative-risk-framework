@@ -444,7 +444,7 @@
     const metrics    = summarise(total_loss);
     const lec        = computeLEC(total_loss, 300);
 
-    lastResults = { inputs, metrics, lec, currency, F, T, P };
+    lastResults = { inputs, metrics, lec, total_loss, currency, F, T, P };
 
     // Show results
     document.getElementById("results-card").classList.remove("hidden");
@@ -519,7 +519,7 @@
   // ── Excel download ───────────────────────────────────────────────────────────
   function downloadExcel() {
     if (!lastResults) return;
-    const { inputs, metrics, lec, currency, F, T, P } = lastResults;
+    const { inputs, metrics, lec, total_loss, currency, F, T, P } = lastResults;
     const cur = currency || "—";
 
     const summaryRows = [
@@ -548,9 +548,15 @@
       ...lec.loss.map((x, i) => [x, lec.exceedancePct[i]]),
     ];
 
+    const simRows = [
+      [`Iteration`, `Annual Loss (${cur})`],
+      ...Array.from(total_loss).map((v, i) => [i + 1, v]),
+    ];
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryRows), "Summary");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(lecRows),     "LEC Data");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(simRows),     "Simulation Results");
     XLSX.writeFile(wb, "risk_model_results.xlsx");
   }
 </script>
