@@ -1,6 +1,6 @@
 # Loss Event Probability Model
 
-This document describes a quantitative model for estimating annual loss from a cyber threat. It is organised in two parts:
+This document describes a quantitative model for estimating annual loss from a security threat. It is organised in two parts:
 
 - **Part 1 — Getting Started**: the core formula, frequency estimation, and a deterministic expected-loss calculation using basic arithmetic. Suitable for first-time users and quick scenario assessments.
 - **Part 2 — Advanced**: lognormal loss distributions, Monte Carlo simulation, loss exceedance curves, secondary losses, and a framework for separating probability-reducing and consequence-reducing controls.
