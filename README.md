@@ -377,6 +377,48 @@ The shape of the result is informative: in most years the simulated annual loss 
 
 Secondary losses often dominate primary losses, especially for breaches involving personal data, regulated industries, or public-facing services. Stakeholders frequently underestimate both S and the magnitude of secondary impact. Eliciting these carefully — with explicit ranges and confidence levels — is usually more valuable than refining the primary loss estimate.
 
+## Modelling Controls
+
+Controls fall into two distinct categories in this model, and it is important to assign each control to the right one.
+
+**Probability-reducing controls** lower the chance that a threat event becomes a loss. They are captured through **P** in the vulnerability function `T / (T + P)`. Examples: firewalls, multi-factor authentication, intrusion detection, access controls.
+
+**Consequence-reducing controls** limit the damage when a loss event does occur. They do not affect `P(loss event)` — instead they reduce the loss magnitude bounds L and U. Examples: backups, incident response plans, data minimisation, contractual liability caps.
+
+### Adjusting Loss Bounds for Consequence Controls
+
+Consequence control strength is expressed as **P_c** on the same 0–1 scale as P. The adjustment applies the Bradley-Terry form to scale the current bounds back to inherent risk (removing existing controls) and then forward to residual risk (applying the planned controls):
+
+```
+New L = Current L × (T + P_c_current) / (T + P_c_new)
+New U = Current U × (T + P_c_current) / (T + P_c_new)
+```
+
+Setting P_c_current = 0 gives inherent loss bounds (no consequence controls at all). Setting P_c_new > P_c_current models the effect of adding or improving controls.
+
+The threat strength T moderates how much consequence controls help — the same improvement in P_c reduces losses less when T is high:
+
+| T | P_c: 0.3 → 0.6 | Scale factor | Interpretation |
+|---|---|---|---|
+| 0.2 | weak threat | 0.4 / 0.8 = 0.50 | Controls halve the loss bounds |
+| 0.5 | moderate threat | 0.8 / 1.1 = 0.73 | Controls reduce bounds by 27% |
+| 0.9 | strong threat | 1.2 / 1.5 = 0.80 | Controls reduce bounds by 20% |
+
+In Python:
+
+```python
+T             = 0.8   # threat strength (same T used in probability formula)
+P_c_current   = 0.3   # current consequence control strength
+P_c_new       = 0.6   # planned consequence control strength
+
+scale = (T + P_c_current) / (T + P_c_new)
+
+L_primary_adjusted = L_primary * scale
+U_primary_adjusted = U_primary * scale
+```
+
+Apply the same scaling to secondary loss bounds if consequence controls also affect secondary losses.
+
 ## Summary
 
 - The formula decomposes loss probability into threat attempt frequency × conditional protection failure: **P(loss event) = F × T/(T+P)**.
@@ -388,3 +430,4 @@ Secondary losses often dominate primary losses, especially for breaches involvin
 - Combine the point-estimate probability with the lognormal magnitudes using **Monte Carlo simulation**. This produces a full annual loss distribution and supports tail metrics (VaR, exceedance curves) — not just an expected value.
 - Extend to **secondary losses** using a conditional probability S and a separate lognormal magnitude, sampled in the same Monte Carlo pipeline.
 - The full model needs only a small number of inputs per scenario: F (or its components), T, P, S, and 90% CIs for primary and secondary loss magnitudes.
+- **Controls split into two types**: probability-reducing controls feed into P in the vulnerability function; consequence-reducing controls are modelled by adjusting L and U using `(T + P_c_current) / (T + P_c_new)`. Threat strength T moderates how much consequence controls can reduce losses.
