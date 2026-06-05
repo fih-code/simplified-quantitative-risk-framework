@@ -42,8 +42,7 @@ This is a well-established functional form used for over 70 years in paired-comp
 
 - **Simple inputs.** Requires only two point estimates (T and P) rather than full distributions.
 - **Well-established.** Bradley-Terry has decades of empirical use in pairwise comparison settings.
-- **Full output range.** Can express extreme conditional probabilities — T = 0.95, P = 0.05 yields 0.95, allowing the model to represent "this attack will almost certainly succeed" or "this protection will almost certainly hold."
-- **Smooth and bounded.** Always returns a value between 0 and 1. When T = P, the result is exactly 0.5.
+- **Smooth and bounded.** Always returns a value between 0 and 1. When T = P, the result is exactly 0.5. Note that the maximum reachable value for a given P is capped at `1 / (1 + P)` — see Limitations below.
 
 **Worked example.** If T = 0.7 and P = 0.5:
 
@@ -55,10 +54,22 @@ In a spreadsheet, this is computed as `=T/(T+P)`.
 
 ### Limitations
 
-Bradley-Terry is a screening approximation, not a probabilistically rigorous calculation. Two limitations worth being explicit about:
+Bradley-Terry is a screening approximation, not a probabilistically rigorous calculation. Four limitations worth being explicit about:
 
 - **Scale invariance.** T = P = 0.1 and T = P = 0.9 both produce 0.5, even though "both weak" and "both strong" feel like meaningfully different worlds. The formula captures only the *relative balance* between offense and defense, not the absolute danger level.
 - **T and P measure different things.** Threat capability and protection strength are conceptually different. The formula assumes they have been calibrated onto a comparable [0, 1] scale, which is a non-trivial requirement.
+- **Output ceiling under strong protection.** Since T is capped at 1, the maximum conditional probability reachable for a given P is `1 / (1 + P)`. Strong protection compresses the output range significantly:
+
+  | P | Ceiling |
+  |---|---|
+  | 0.3 | 0.77 |
+  | 0.5 | 0.67 |
+  | 0.7 | 0.59 |
+  | 0.9 | 0.53 |
+
+  A highly capable attacker against protection rated at 0.5 can never exceed 67% conditional probability in this model, regardless of T. For scenarios where an advanced attacker should be represented as near-certain to succeed, this is a material limitation.
+
+- **No calibration procedure for T and P.** Every output is sensitive to the ratio T/P, but the framework provides no rubric for arriving at a specific value. Two analysts assessing the same scenario can reach materially different numbers. Treat outputs as relative and analyst-dependent, not absolute, unless your team has established shared definitions and reference scenarios for what "0.3 protection" or "0.7 threat" concretely means in your context.
 
 For settings requiring rigorous probabilistic interpretation (e.g., capital reserves, insurance limits), a distribution-based approach such as FAIR's P(Threat Capability > Resistance Strength) is more appropriate. This model is intended as a screening and prioritization tool.
 
@@ -79,7 +90,9 @@ F = (s + 1) / (n + 2)
 | **s** | Number of years in which threat events were observed |
 | **n** | Total number of years observed |
 
-LRS is simple, defensible, and converges to the true rate as data accumulates. With no observations at all, it returns 0.5 — a neutral starting point.
+LRS is simple, defensible, and converges to the true rate as data accumulates. With no observations at all, it returns 0.5.
+
+> **Note on binary counting and the 0.5 default.** LRS treats each year as a yes/no observation — a year with 50 events and a year with 1 event both count as "1", so within-year frequency is lost. The 0.5 no-data default is also not neutral for rare strategic threats: for a threat expected to materialise every decade, 0.5 implies it occurs every other year, which is far too pessimistic. If your prior belief is that a threat is rare, anchor with Beta-PERT instead.
 
 **Use when:** threat attempts are logged systematically and the threat profile is stable.
 
@@ -148,11 +161,13 @@ A common mistake is to apply LRS to historical *loss incidents* rather than *thr
 
 ## Estimating Expected Annual Loss
 
-The deterministic approach uses the Beta-PERT mean for loss magnitudes — the same formula used for F. Elicit three values per loss type: minimum plausible loss (L), most likely loss (mode), and maximum plausible loss (U).
+The deterministic approach uses the Beta-PERT mean for loss magnitudes — the same formula used for F. Elicit three values per loss type: minimum plausible loss (L_min), most likely loss (mode), and maximum plausible loss (U_max).
 
 ```
-mean_loss = (L + 4 × mode + U) / 6
+mean_loss = (L_min + 4 × mode + U_max) / 6
 ```
+
+> **Important: L_min and U_max here are absolute bounds — the smallest and largest plausible loss.** Part 2 uses different variables (L_5th, U_95th) that represent the 5th and 95th percentiles of a lognormal distribution. These are not the same numbers and cannot be copied between parts.
 
 Loss events often trigger follow-on consequences beyond the immediate primary loss: regulatory fines, lawsuits, customer churn, reputational damage. These are called **secondary losses**. They are modelled as conditional on a primary loss occurring, controlled by S — the probability of secondary fallout given a primary loss. If secondary losses are not relevant, set S = 0.
 
@@ -163,26 +178,26 @@ E[annual loss] = P(loss event) × (mean_primary + S × mean_secondary)
 | Symbol | Meaning | Range |
 |---|---|---|
 | **S** | Probability of secondary loss given a primary loss | 0 to 1 |
-| **L** | Minimum plausible loss | ≥ 0 |
+| **L_min** | Minimum plausible loss (absolute lower bound) | ≥ 0 |
 | **mode** | Most likely loss | ≥ 0 |
-| **U** | Maximum plausible loss | ≥ 0 |
+| **U_max** | Maximum plausible loss (absolute upper bound) | ≥ 0 |
 
 In Python:
 
 ```python
 # Inputs
-p_loss_event    = 0.13   # from formula: F × T/(T+P)
-S               = 0.4    # P(secondary loss | primary loss)
-L_primary       = 10     # Minimum primary loss
-mode_primary    = 14     # Most likely primary loss
-U_primary       = 20     # Maximum primary loss
-L_secondary     = 50     # Minimum secondary loss
-mode_secondary  = 70     # Most likely secondary loss
-U_secondary     = 100    # Maximum secondary loss
+p_loss_event        = 0.13   # from formula: F × T/(T+P)
+S                   = 0.4    # P(secondary loss | primary loss)
+L_min_primary       = 10     # Minimum primary loss (absolute bound)
+mode_primary        = 14     # Most likely primary loss
+U_max_primary       = 20     # Maximum primary loss (absolute bound)
+L_min_secondary     = 50     # Minimum secondary loss (absolute bound)
+mode_secondary      = 70     # Most likely secondary loss
+U_max_secondary     = 100    # Maximum secondary loss (absolute bound)
 
 # Beta-PERT means (λ=4, standard PERT)
-mean_primary   = (L_primary + 4 * mode_primary + U_primary) / 6
-mean_secondary = (L_secondary + 4 * mode_secondary + U_secondary) / 6
+mean_primary   = (L_min_primary + 4 * mode_primary + U_max_primary) / 6
+mean_secondary = (L_min_secondary + 4 * mode_secondary + U_max_secondary) / 6
 
 # Output
 expected_annual_loss = p_loss_event * (mean_primary + S * mean_secondary)
@@ -204,10 +219,10 @@ expected_annual_loss = p_loss_event * (mean_primary + S * mean_secondary)
 - F = (0.05 + 4 × 0.15 + 0.50) / 6 = **0.19**
 - Threat strength T = 0.8, Protection strength P = 0.4
 - P(loss event) = 0.19 × 0.67 = **0.13**
-- Primary loss: L = $100,000, mode = $500,000, U = $2,000,000
+- Primary loss: L_min = $100,000, mode = $500,000, U_max = $2,000,000
 - mean_primary = (100,000 + 4 × 500,000 + 2,000,000) / 6 = **$683,333**
 - S = 0.4 (40% probability of regulatory or reputational fallout)
-- Secondary loss: L = $500,000, mode = $2,000,000, U = $10,000,000
+- Secondary loss: L_min = $500,000, mode = $2,000,000, U_max = $10,000,000
 - mean_secondary = (500,000 + 4 × 2,000,000 + 10,000,000) / 6 = **$3,083,333**
 - E[annual loss] = 0.13 × (683,333 + 0.4 × 3,083,333) ≈ **$249,167**
 
@@ -229,20 +244,22 @@ Lognormal is the natural choice for loss magnitudes because:
 
 Specify a lognormal distribution through its **90% confidence interval** — a range within which the estimator is 90% confident the loss will fall:
 
-- **L** — lower bound (5th percentile of plausible loss)
-- **U** — upper bound (95th percentile of plausible loss)
+- **L_5th** — lower bound (5th percentile of plausible loss)
+- **U_95th** — upper bound (95th percentile of plausible loss)
+
+> **Important: L_5th and U_95th are percentiles, not absolute bounds.** Part 1 uses L_min and U_max as the smallest and largest plausible loss. These are different concepts and the same numbers cannot be used in both parts. If you elicit "the worst case is 2,000,000" and use it as U_95th, you are telling the model that 5% of loss draws will exceed 2,000,000 — which contradicts your own elicitation and fattens the simulated tail.
 
 The estimator answers two questions:
-- "What is the smallest loss I would be surprised to fall below?"
-- "What is the largest loss I would be surprised to exceed?"
+- "What is the smallest loss I would be surprised to fall below?" → L_5th
+- "What is the largest loss I would be surprised to exceed?" → U_95th
 
 This is the same elicitation pattern used in Doug Hubbard's calibrated-estimation methodology and the Open FAIR framework.
 
 ### Lognormal Parameters from a 90% CI
 
 ```
-μ = ( ln(L) + ln(U) ) / 2
-σ = ( ln(U) − ln(L) ) / 3.29
+μ = ( ln(L_5th) + ln(U_95th) ) / 2
+σ = ( ln(U_95th) − ln(L_5th) ) / 3.29
 ```
 
 The constant 3.29 is 2 × 1.645, where 1.645 is the z-score for the 5th and 95th percentiles of a standard normal distribution.
@@ -255,18 +272,18 @@ The full pipeline combines the point-estimate probability with sampled loss magn
 import numpy as np
 
 # Inputs
-p_loss_event   = 0.13         # from formula: F × T/(T+P)
-S              = 0.4          # P(secondary loss | primary loss)
-L_primary      = 10           # Lower bound primary losses 90% confidence interval
-U_primary      = 20           # Upper bound primary losses 90% confidence interval
-L_secondary    = 50           # Lower bound secondary losses 90% confidence interval
-U_secondary    = 100          # Upper bound secondary losses 90% confidence interval
+p_loss_event       = 0.13    # from formula: F × T/(T+P)
+S                  = 0.4     # P(secondary loss | primary loss)
+L_5th_primary      = 10      # 5th percentile primary loss (90% CI lower bound)
+U_95th_primary     = 20      # 95th percentile primary loss (90% CI upper bound)
+L_5th_secondary    = 50      # 5th percentile secondary loss (90% CI lower bound)
+U_95th_secondary   = 100     # 95th percentile secondary loss (90% CI upper bound)
 
-mu_primary     = (np.log(L_primary) + np.log(U_primary)) / 2
-sigma_primary  = (np.log(U_primary) - np.log(L_primary)) / 3.29
+mu_primary     = (np.log(L_5th_primary) + np.log(U_95th_primary)) / 2
+sigma_primary  = (np.log(U_95th_primary) - np.log(L_5th_primary)) / 3.29
 
-mu_secondary   = (np.log(L_secondary) + np.log(U_secondary)) / 2
-sigma_secondary= (np.log(U_secondary) - np.log(L_secondary)) / 3.29
+mu_secondary   = (np.log(L_5th_secondary) + np.log(U_95th_secondary)) / 2
+sigma_secondary= (np.log(U_95th_secondary) - np.log(L_5th_secondary)) / 3.29
 
 # Simulation
 N = 100_000
@@ -293,6 +310,12 @@ The output is a full **annual loss distribution**, which supports:
 - **Value at Risk (VaR)** — loss at a given percentile (e.g., 95th, 99th).
 
 This is more informative than a single expected-value number because most loss-related decisions (insurance limits, capital reserves, risk-appetite thresholds) depend on the tail of the distribution, not just the mean.
+
+**Known limitations of this simulation structure:**
+
+- **One event per year.** Each iteration does a single yes/no draw — a simulated year contains at most one loss event. For threats that can recur within a year, the tail is artificially capped. This structure is best suited to low-frequency, high-impact threats.
+- **U_95th is not a maximum.** The upper bound is the 95th percentile, not a hard cap. 5% of simulated loss draws will exceed it, and those values drive VaR99 and the far tail of the exceedance curve. The tail metrics are particularly sensitive to how wide the interval is drawn — widening the gap between L_5th and U_95th will meaningfully increase expected loss and VaR figures.
+- **All inputs are independent.** F, T, P, S and the loss magnitudes are sampled independently. Correlated bad years — where multiple threats materialise simultaneously, or a large primary loss triggers disproportionately large secondary losses — are not captured. Treat tail figures as scenario-specific, not as system-wide worst cases.
 
 ## Plotting the Loss Exceedance Curve
 
@@ -377,9 +400,9 @@ S is elicited using the same patterns as F:
 Building on Example 2 from Part 1:
 
 - **P(loss event)** = 0.13
-- **Primary loss 90% CI**: L = $100,000, U = $2,000,000
+- **Primary loss 90% CI**: L_5th = $100,000, U_95th = $2,000,000
 - **S** = 0.4 (40% probability of regulatory or reputational fallout given a breach)
-- **Secondary loss 90% CI**: L = $500,000, U = $10,000,000
+- **Secondary loss 90% CI**: L_5th = $500,000, U_95th = $10,000,000
 
 Running 100,000 Monte Carlo iterations using the pipeline above, typical outputs are roughly:
 
@@ -435,13 +458,15 @@ U_primary_adjusted = U_primary * scale
 
 Apply the same scaling to secondary loss bounds if consequence controls also affect secondary losses.
 
+> **Heuristic, not derived.** The Bradley-Terry scaling is borrowed from the probability formula for consistency, but Bradley-Terry models who wins a contest — it outputs probabilities, not damage multipliers. There is no first-principles justification for applying it to loss magnitudes. Two specific limitations: (1) L and U are scaled by the same factor, so the shape of the uncertainty is preserved rather than compressed — real controls often reduce worst-case losses more than typical-case losses; (2) coupling consequence reduction to T assumes a strong attacker also limits how well your controls reduce damage, which may hold for specific mechanisms (e.g., a sophisticated attacker who disables backups before encrypting) but is not generally valid. Use this adjustment as a structured way to express a directional view on consequence controls, not as a precise calculation.
+
 ## Summary
 
 - The formula decomposes loss probability into threat attempt frequency × conditional protection failure: **P(loss event) = F × T/(T+P)**.
-- The vulnerability factor uses the **Bradley-Terry form** for paired comparisons. It is a screening approximation, not a probabilistically rigorous calculation.
-- Use **LRS** when threat attempts are logged and the profile is stable. Use **Beta-PERT** when there is no reliable telemetry, and tune **λ** to reflect confidence.
+- The vulnerability factor uses the **Bradley-Terry form** for paired comparisons. It is a screening approximation, not a probabilistically rigorous calculation. The output is capped at `1 / (1 + P)` — strong protection compresses the range. All outputs are analyst-dependent without a shared T/P calibration rubric.
+- Use **LRS** when threat attempts are logged and the profile is stable — note it treats each year as binary and the 0.5 no-data default is pessimistic for rare threats. Use **Beta-PERT** when there is no reliable telemetry, and tune **λ** to reflect confidence.
 - Never feed loss incidents into LRS — count attempts, not realized losses.
-- **Part 1 (deterministic):** estimate expected annual loss using the Beta-PERT mean for loss magnitudes — basic arithmetic, single output.
-- **Part 2 (simulation):** model loss magnitudes as **lognormal** distributions elicited from a 90% CI, combine with Monte Carlo simulation for a full annual loss distribution and tail metrics (VaR, exceedance curves).
+- **Part 1 (deterministic):** estimate expected annual loss using the Beta-PERT mean with absolute bounds (L_min, mode, U_max) — basic arithmetic, single output.
+- **Part 2 (simulation):** model loss magnitudes as **lognormal** distributions elicited from a 90% CI (L_5th, U_95th — percentiles, not absolute bounds), combine with Monte Carlo simulation for a full annual loss distribution and tail metrics. Each simulated year contains at most one event; tail figures are sensitive to interval width; all inputs are independent.
 - Extend to **secondary losses** using a conditional probability S and a separate loss distribution sampled in the same pipeline.
-- **Controls split into two types**: probability-reducing controls feed into P in the vulnerability function; consequence-reducing controls are modelled by adjusting L and U using `(T + P_c_current) / (T + P_c_new)`. Threat strength T moderates how much consequence controls can reduce losses.
+- **Controls split into two types**: probability-reducing controls feed into P in the vulnerability function; consequence-reducing controls are modelled by adjusting loss bounds using `(T + P_c_current) / (T + P_c_new)`. This scaling is a structured heuristic, not a derived formula.
