@@ -1,8 +1,13 @@
 # Loss Event Probability Model
 
-## Purpose
+This document describes a quantitative model for estimating annual loss from a cyber threat. It is organised in two parts:
 
-This document describes a probability model for estimating the likelihood of a loss event from a threat, along with a structured way to estimate primary and secondary loss magnitudes. The model decomposes loss probability into two parts — threat event frequency and the conditional probability that protection fails — and supports two methods for estimating frequency depending on the data available.
+- **Part 1 — Getting Started**: the core formula, frequency estimation, and a deterministic expected-loss calculation using basic arithmetic. Suitable for first-time users and quick scenario assessments.
+- **Part 2 — Advanced**: lognormal loss distributions, Monte Carlo simulation, loss exceedance curves, secondary losses, and a framework for separating probability-reducing and consequence-reducing controls.
+
+---
+
+# Part 1: Getting Started
 
 ## The Formula
 
@@ -141,61 +146,28 @@ A common mistake is to apply LRS to historical *loss incidents* rather than *thr
 
 **Always count threat attempts in LRS, not realized losses.** If only loss data is available, use Beta-PERT to estimate threat attempt frequency directly.
 
-## Worked Examples
+## Estimating Expected Annual Loss
 
-### Example 1 — DDoS attempts requiring mitigation (telemetry exists, LRS)
-
-- Observed: significant DDoS events requiring mitigation in 5 of the last 10 years
-- F = (5 + 1) / (10 + 2) = 6 / 12 = **0.50**
-- Threat strength T = 0.5, Protection strength P = 0.7
-- Vulnerability = T / (T + P) = 0.5 / 1.2 ≈ **0.42**
-- P(loss event) = 0.50 × 0.42 = **0.21**
-
-### Example 2 — Ransomware (no telemetry, Beta-PERT)
-
-- Expert estimate of annual probability: min = 5%, mode = 15%, max = 50%
-- Confidence = Moderate (λ = 4)
-- F = (0.05 + 4 × 0.15 + 0.50) / 6 = 1.15 / 6 = **0.19**
-- Threat strength T = 0.8, Protection strength P = 0.4
-- Vulnerability = T / (T + P) = 0.8 / 1.2 ≈ **0.67**
-- P(loss event) = 0.19 × 0.67 = **0.13**
-
-## Estimating Loss Magnitudes
-
-Both primary and secondary losses are combined with the loss probability using one of two approaches: a **deterministic** calculation using the Beta-PERT mean (fast, single expected-value output, basic arithmetic only) or a **Monte Carlo simulation** (full annual loss distribution with tail metrics). Use deterministic for quick estimates; use simulation when tail risk matters.
-
-Lognormal is the natural choice for loss magnitudes because:
-
-- It is bounded at zero (losses cannot be negative).
-- It is right-skewed, reflecting that losses tend to cluster near a typical value with occasional larger outliers.
-- It is well-suited to elicitation from a confidence interval — two intuitive numbers fully define the distribution.
-
-### The 90% Confidence Interval Elicitation
-
-The simplest way to specify a lognormal distribution is through its **90% confidence interval** — a range within which the estimator is 90% confident the loss will fall. This requires only two numbers:
-
-- **L** — lower bound (5th percentile of plausible loss)
-- **U** — upper bound (95th percentile of plausible loss)
-
-From these two numbers, the full lognormal distribution is determined. No expert knowledge of probability distributions is required — only the ability to state a confident range. The estimator answers two intuitive questions:
-
-- "What is the smallest loss I would be surprised to fall below?"
-- "What is the largest loss I would be surprised to exceed?"
-
-This is the same elicitation pattern used in Doug Hubbard's calibrated-estimation methodology and the Open FAIR framework.
-
-### Lognormal Parameters from a 90% CI
+The deterministic approach uses the Beta-PERT mean for loss magnitudes — the same formula used for F. Elicit three values per loss type: minimum plausible loss (L), most likely loss (mode), and maximum plausible loss (U).
 
 ```
-μ = ( ln(L) + ln(U) ) / 2
-σ = ( ln(U) − ln(L) ) / 3.29
+mean_loss = (L + 4 × mode + U) / 6
 ```
 
-The constant 3.29 is 2 × 1.645, where 1.645 is the z-score for the 5th and 95th percentiles of a standard normal distribution.
+Loss events often trigger follow-on consequences beyond the immediate primary loss: regulatory fines, lawsuits, customer churn, reputational damage. These are called **secondary losses**. They are modelled as conditional on a primary loss occurring, controlled by S — the probability of secondary fallout given a primary loss. If secondary losses are not relevant, set S = 0.
 
-### Deterministic Output
+```
+E[annual loss] = P(loss event) × (mean_primary + S × mean_secondary)
+```
 
-The deterministic approach applies the same Beta-PERT mean formula used for threat frequency to loss magnitudes. L and U are treated as min and max, and a mode (most likely loss) is added as a third input. No logarithms or exponentials required.
+| Symbol | Meaning | Range |
+|---|---|---|
+| **S** | Probability of secondary loss given a primary loss | 0 to 1 |
+| **L** | Minimum plausible loss | ≥ 0 |
+| **mode** | Most likely loss | ≥ 0 |
+| **U** | Maximum plausible loss | ≥ 0 |
+
+In Python:
 
 ```python
 # Inputs
@@ -216,7 +188,66 @@ mean_secondary = (L_secondary + 4 * mode_secondary + U_secondary) / 6
 expected_annual_loss = p_loss_event * (mean_primary + S * mean_secondary)
 ```
 
-### Monte Carlo Simulation
+## Worked Examples
+
+### Example 1 — DDoS attempts requiring mitigation (telemetry exists, LRS)
+
+- Observed: significant DDoS events requiring mitigation in 5 of the last 10 years
+- F = (5 + 1) / (10 + 2) = 6 / 12 = **0.50**
+- Threat strength T = 0.5, Protection strength P = 0.7
+- Vulnerability = T / (T + P) = 0.5 / 1.2 ≈ **0.42**
+- P(loss event) = 0.50 × 0.42 = **0.21**
+
+### Example 2 — Ransomware end-to-end (no telemetry, Beta-PERT, deterministic)
+
+- Expert estimate of annual frequency: min = 5%, mode = 15%, max = 50%, confidence = Moderate (λ = 4)
+- F = (0.05 + 4 × 0.15 + 0.50) / 6 = **0.19**
+- Threat strength T = 0.8, Protection strength P = 0.4
+- P(loss event) = 0.19 × 0.67 = **0.13**
+- Primary loss: L = $100,000, mode = $500,000, U = $2,000,000
+- mean_primary = (100,000 + 4 × 500,000 + 2,000,000) / 6 = **$683,333**
+- S = 0.4 (40% probability of regulatory or reputational fallout)
+- Secondary loss: L = $500,000, mode = $2,000,000, U = $10,000,000
+- mean_secondary = (500,000 + 4 × 2,000,000 + 10,000,000) / 6 = **$3,083,333**
+- E[annual loss] = 0.13 × (683,333 + 0.4 × 3,083,333) ≈ **$249,167**
+
+---
+
+# Part 2: Advanced
+
+Part 1 gives a single expected-value output using basic arithmetic. Part 2 extends the model in three ways: replacing the Beta-PERT point estimate with a lognormal distribution to capture uncertainty in loss magnitudes, using Monte Carlo simulation to produce a full annual loss distribution with tail metrics, and separating controls into those that reduce the probability of a loss event and those that reduce its consequences.
+
+## Lognormal Loss Distributions
+
+Lognormal is the natural choice for loss magnitudes because:
+
+- It is bounded at zero (losses cannot be negative).
+- It is right-skewed, reflecting that losses tend to cluster near a typical value with occasional larger outliers.
+- It is well-suited to elicitation from a confidence interval — two intuitive numbers fully define the distribution.
+
+### The 90% Confidence Interval Elicitation
+
+Specify a lognormal distribution through its **90% confidence interval** — a range within which the estimator is 90% confident the loss will fall:
+
+- **L** — lower bound (5th percentile of plausible loss)
+- **U** — upper bound (95th percentile of plausible loss)
+
+The estimator answers two questions:
+- "What is the smallest loss I would be surprised to fall below?"
+- "What is the largest loss I would be surprised to exceed?"
+
+This is the same elicitation pattern used in Doug Hubbard's calibrated-estimation methodology and the Open FAIR framework.
+
+### Lognormal Parameters from a 90% CI
+
+```
+μ = ( ln(L) + ln(U) ) / 2
+σ = ( ln(U) − ln(L) ) / 3.29
+```
+
+The constant 3.29 is 2 × 1.645, where 1.645 is the z-score for the 5th and 95th percentiles of a standard normal distribution.
+
+## Monte Carlo Simulation
 
 The full pipeline combines the point-estimate probability with sampled loss magnitudes over N iterations (typically 10,000 to 100,000). Each iteration represents one possible year:
 
@@ -263,9 +294,9 @@ The output is a full **annual loss distribution**, which supports:
 
 This is more informative than a single expected-value number because most loss-related decisions (insurance limits, capital reserves, risk-appetite thresholds) depend on the tail of the distribution, not just the mean.
 
-### Plotting the Loss Exceedance Curve
+## Plotting the Loss Exceedance Curve
 
-The loss exceedance curve (LEC) shows the probability that annual loss exceeds any given threshold. Pass `total_loss` from the Monte Carlo simulation directly as `results_series`. An optional `appetite_pts` list of `(loss, probability)` tuples overlays a risk appetite line.
+The loss exceedance curve (LEC) shows the probability that annual loss exceeds any given threshold. Pass `total_loss` from the Monte Carlo simulation directly as `results_series`. An optional `appetite_pts` list of `(exceedance_probability, loss)` tuples overlays a risk appetite line.
 
 ```python
 import numpy as np
@@ -330,16 +361,9 @@ lec(total_loss, riskscenario="Ransomware", currency="MSEK", appetite_pts=[(10, 0
 
 ## Secondary Losses
 
-Loss events often trigger follow-on consequences beyond the immediate primary loss: regulatory fines, lawsuits, customer churn, reputational damage, increased insurance costs. These are called **secondary losses** in the FAIR taxonomy.
+Secondary losses often dominate primary losses, especially for breaches involving personal data, regulated industries, or public-facing services. Stakeholders frequently underestimate both S and the magnitude of secondary impact. Eliciting these carefully — with explicit ranges and confidence levels — is usually more valuable than refining the primary loss estimate.
 
-Secondary losses are modeled as conditional on a primary loss occurring, with their own probability and their own lognormal magnitude:
-
-| Symbol | Meaning | Range |
-|---|---|---|
-| **S** | Probability of meaningful secondary fallout given a primary loss | 0 to 1 |
-| **L_secondary, U_secondary** | 90% CI bounds for the secondary lognormal | ≥ 0 |
-
-In each Monte Carlo iteration, if a primary loss occurs, a secondary loss is then sampled with probability S from its own lognormal distribution. If secondary losses are not realistic for a given threat, set S = 0 and the secondary contribution drops out.
+In the Monte Carlo pipeline, if a primary loss occurs, a secondary loss is then sampled with probability S from its own lognormal distribution. Secondary losses use a separate lognormal distribution with its own 90% confidence interval, distinct from the primary loss distribution. Secondary losses typically have different drivers (regulatory environment, public visibility, stakeholder response) and often have a wider range than primary losses.
 
 ### Estimating S
 
@@ -348,15 +372,11 @@ S is elicited using the same patterns as F:
 - **Telemetry-based (LRS)** when historical data on escalated incidents exists — rare for secondary losses.
 - **Beta-PERT mean** when subject-matter experts can estimate a plausible range — the usual case.
 
-### Estimating Secondary Loss Magnitude
+### Worked Example — Ransomware (Monte Carlo)
 
-Use a separate lognormal distribution with its own 90% confidence interval, distinct from the primary loss distribution. Secondary losses typically have different drivers (regulatory environment, public visibility, stakeholder response) and often have a wider range than primary losses.
+Building on Example 2 from Part 1:
 
-### Worked Example — Ransomware (end-to-end)
-
-Building on Example 2:
-
-- **P(loss event)** = 0.13 (from F × T/(T+P))
+- **P(loss event)** = 0.13
 - **Primary loss 90% CI**: L = $100,000, U = $2,000,000
 - **S** = 0.4 (40% probability of regulatory or reputational fallout given a breach)
 - **Secondary loss 90% CI**: L = $500,000, U = $10,000,000
@@ -372,10 +392,6 @@ Running 100,000 Monte Carlo iterations using the pipeline above, typical outputs
 | 99th-percentile annual loss | ~$11M |
 
 The shape of the result is informative: in most years the simulated annual loss is zero (because P(loss event) = 0.13, so ~87% of simulated years have no loss event), but in the tail of the distribution losses can be very large. This pattern — long stretches of nothing, punctuated by rare large events — is typical of low-frequency, high-impact threats and is exactly the structure that an expected-value point estimate would hide.
-
-### Why Secondary Losses Matter
-
-Secondary losses often dominate primary losses, especially for breaches involving personal data, regulated industries, or public-facing services. Stakeholders frequently underestimate both S and the magnitude of secondary impact. Eliciting these carefully — with explicit ranges and confidence levels — is usually more valuable than refining the primary loss estimate.
 
 ## Modelling Controls
 
@@ -423,11 +439,9 @@ Apply the same scaling to secondary loss bounds if consequence controls also aff
 
 - The formula decomposes loss probability into threat attempt frequency × conditional protection failure: **P(loss event) = F × T/(T+P)**.
 - The vulnerability factor uses the **Bradley-Terry form** for paired comparisons. It is a screening approximation, not a probabilistically rigorous calculation.
-- Use **LRS** when threat attempts are logged and the profile is stable.
-- Use **Beta-PERT** when there is no reliable telemetry, and tune **λ** to reflect confidence.
+- Use **LRS** when threat attempts are logged and the profile is stable. Use **Beta-PERT** when there is no reliable telemetry, and tune **λ** to reflect confidence.
 - Never feed loss incidents into LRS — count attempts, not realized losses.
-- Loss magnitudes (both primary and secondary) are modeled as **lognormal** distributions, elicited from a simple **90% confidence interval** (lower and upper bound). No expert knowledge of distributions is required.
-- Combine the point-estimate probability with the lognormal magnitudes using **Monte Carlo simulation**. This produces a full annual loss distribution and supports tail metrics (VaR, exceedance curves) — not just an expected value.
-- Extend to **secondary losses** using a conditional probability S and a separate lognormal magnitude, sampled in the same Monte Carlo pipeline.
-- The full model needs only a small number of inputs per scenario: F (or its components), T, P, S, and 90% CIs for primary and secondary loss magnitudes.
+- **Part 1 (deterministic):** estimate expected annual loss using the Beta-PERT mean for loss magnitudes — basic arithmetic, single output.
+- **Part 2 (simulation):** model loss magnitudes as **lognormal** distributions elicited from a 90% CI, combine with Monte Carlo simulation for a full annual loss distribution and tail metrics (VaR, exceedance curves).
+- Extend to **secondary losses** using a conditional probability S and a separate loss distribution sampled in the same pipeline.
 - **Controls split into two types**: probability-reducing controls feed into P in the vulnerability function; consequence-reducing controls are modelled by adjusting L and U using `(T + P_c_current) / (T + P_c_new)`. Threat strength T moderates how much consequence controls can reduce losses.
