@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Loss Event Probability Model</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -321,7 +322,10 @@
 
   <!-- Results -->
   <div class="card hidden" id="results-card">
-    <h2>Outputs</h2>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.25rem;">
+      <h2 style="margin-bottom:0;">Outputs</h2>
+      <button onclick="downloadExcel()" style="padding:0.4rem 1rem; font-size:0.82rem;">Download Excel</button>
+    </div>
     <div class="metrics">
       <div class="metric highlight">
         <div class="label">Expected Annual Loss</div>
@@ -414,8 +418,9 @@
     return n.toFixed(0);
   }
 
-  // ── Chart instance ──────────────────────────────────────────────────────────
-  let lecChart = null;
+  // ── Chart instance + last results store ────────────────────────────────────
+  let lecChart    = null;
+  let lastResults = null;
 
   // ── Run ─────────────────────────────────────────────────────────────────────
   function runSimulation() {
@@ -438,6 +443,8 @@
     const total_loss = monteCarlo(inputs, N);
     const metrics    = summarise(total_loss);
     const lec        = computeLEC(total_loss, 300);
+
+    lastResults = { inputs, metrics, lec, currency, F, T, P };
 
     // Show results
     document.getElementById("results-card").classList.remove("hidden");
@@ -507,6 +514,44 @@
         }
       }
     });
+  }
+
+  // ── Excel download ───────────────────────────────────────────────────────────
+  function downloadExcel() {
+    if (!lastResults) return;
+    const { inputs, metrics, lec, currency, F, T, P } = lastResults;
+    const cur = currency || "—";
+
+    const summaryRows = [
+      ["INPUTS", ""],
+      ["F — Annual threat frequency",        F],
+      ["T — Threat strength",                T],
+      ["P — Protection strength",            P],
+      ["P(loss event)",                      inputs.p_loss_event],
+      ["S — P(secondary loss | primary)",    inputs.S],
+      ["Primary loss L₅th",                  inputs.L_5th_primary],
+      ["Primary loss U₉₅th",                 inputs.U_95th_primary],
+      ["Secondary loss L₅th",                inputs.L_5th_secondary],
+      ["Secondary loss U₉₅th",               inputs.U_95th_secondary],
+      ["Currency",                            cur],
+      [""],
+      ["OUTPUTS", ""],
+      [`Expected Annual Loss (${cur})`,      metrics.expectedAnnualLoss],
+      [`Median Annual Loss (${cur})`,        metrics.median],
+      [`VaR 90% (${cur})`,                   metrics.var90],
+      [`VaR 95% (${cur})`,                   metrics.var95],
+      [`VaR 99% (${cur})`,                   metrics.var99],
+    ];
+
+    const lecRows = [
+      [`Loss Amount (${cur})`, "Exceedance Probability (%)"],
+      ...lec.loss.map((x, i) => [x, lec.exceedancePct[i]]),
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryRows), "Summary");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(lecRows),     "LEC Data");
+    XLSX.writeFile(wb, "risk_model_results.xlsx");
   }
 </script>
 
