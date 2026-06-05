@@ -453,7 +453,11 @@
       document.getElementById("unit-" + id).textContent = currency
     );
 
-    // LEC chart
+    // LEC chart — auto-scale axes from data
+    const sorted99  = Array.from(total_loss).sort((a, b) => a - b);
+    const xMax      = sorted99[Math.floor(0.99 * sorted99.length)] || sorted99[sorted99.length - 1];
+    const yMax      = Math.min(100, lec.exceedancePct[0] * 1.1);
+
     const chartData = lec.loss.map((x, i) => ({ x, y: lec.exceedancePct[i] }));
     const xLabel    = currency ? `Annual Loss (${currency})` : "Annual Loss";
 
@@ -478,6 +482,8 @@
         scales: {
           x: {
             type: "linear",
+            min: 0,
+            max: xMax,
             title: { display: true, text: xLabel },
             ticks: {
               callback: v => fmt(v),
@@ -487,6 +493,7 @@
           y: {
             title: { display: true, text: "Exceedance Probability (%)" },
             min: 0,
+            max: yMax,
           }
         },
         plugins: {
